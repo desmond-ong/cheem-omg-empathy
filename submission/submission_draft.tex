@@ -1,0 +1,167 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%2345678901234567890123456789012345678901234567890123456789012345678901234567890
+%        1         2         3         4         5         6         7         8
+%
+% Slightly modified by Z. Zhang for FG 2018
+%
+
+%\documentclass[letterpaper, 10 pt, conference]{ieeeconf}  % Comment this line out
+                                                          % if you need a4paper
+\documentclass[a4paper, 10pt, conference]{ieeeconf}      % Use this line for a4
+                                                          % paper
+\usepackage{FG2018}
+
+%\FGfinalcopy % *** Uncomment this line for the final submission
+
+
+
+\IEEEoverridecommandlockouts                              % This command is only
+                                                          % needed if you want to
+                                                          % use the \thanks command
+\overrideIEEEmargins
+% See the \addtolength command later in the file to balance the column lengths
+% on the last page of the document
+
+% The following packages can be found on http:\\www.ctan.org
+%\usepackage{graphics} % for pdf, bitmapped graphics files
+%\usepackage{epsfig} % for postscript graphics files
+%\usepackage{mathptmx} % assumes new font selection scheme installed
+%\usepackage{times} % assumes new font selection scheme installed
+%\usepackage{amsmath} % assumes amsmath package installed
+%\usepackage{amssymb}  % assumes amsmath package installed
+
+\def\FGPaperID{****} % *** Enter the FG 2018 Paper ID here
+
+\title{\LARGE \bf
+Preparation of Papers for IEEE Sponsored Conferences \& Symposia
+}
+
+%use this in case of a single affiliation
+%\author{\parbox{16cm}{\centering
+%    {\large Huibert Kwakernaak}\\
+%    {\normalsize
+%    Faculty of Electrical Engineering, Mathematics and Computer Science, University of Twente, Enschede, The Netherlands\\}}
+%    \thanks{This work was not supported by any organization.}% <-this % stops a space
+%}
+
+%use this in case of several affiliations
+\author{\parbox{16cm}{\centering
+    {\large Huibert Kwakernaak$^1$ and Pradeep Misra$^2$}\\
+    {\normalsize
+    $^1$ Faculty of Electrical Engineering, Mathematics and Computer Science, University of Twente, Enschede, The Netherlands\\
+    $^2$ Department of Electrical Engineering, Wright State University, Dayton, USA}}
+    \thanks{This work was not supported by any organization}% <-this % stops a space
+}
+
+\begin{document}
+
+\ifFGfinal
+\thispagestyle{empty}
+\pagestyle{empty}
+\else
+\author{Anonymous FG 2018 submission\\ Paper ID \FGPaperID \\}
+\pagestyle{plain}
+\fi
+\maketitle
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+
+Abstract. 
+
+\end{abstract}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+
+Intro
+
+\subsection{XXX}
+
+XXX
+
+\begin{table}
+\caption{An Example of a Table}
+\label{table_example}
+\begin{center}
+\begin{tabular}{|c||c|}
+\hline
+One & Two\\
+\hline
+Three & Four\\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+
+
+\subsection{Numbering}
+
+Number reference citations consecutively in square brackets \cite{c1}.
+ The sentence punctuation follows the brackets \cite{c2}.
+ Refer simply to the reference number, as in \cite{c3}.
+ Do not use ``ref. \cite{c3}'' or ``reference \cite{c3}''.
+Number footnotes separately in superscripts\footnote{This is a footnote}
+Place the actual footnote at the bottom of the column in which it is cited.
+Do not put footnotes in the reference list.
+Use letters for table footnotes (see Table I).
+
+\subsection{Equations}
+
+Number equations consecutively with equation numbers in parentheses flush
+ with the right margin, as in (1). To make your equations more compact
+ you may use the solidus (/), the exp. function, or appropriate exponents.
+  Italicize Roman symbols for quantities and variables, but not Greek symbols.
+   Use a long dash rather then hyphen for a minus sign. Use parentheses to avoid
+    ambiguities in the denominator.
+Punctuate equations with commas or periods when they are part of a sentence:
+$$\Gamma_2 a^2 + \Gamma_3 a^3 + \Gamma_4 a^4 + ... = \lambda \Lambda(x),$$
+where $\lambda$ is an auxiliary parameter.
+
+Be sure that the symbols in your equation have been defined before the
+equation appears or immediately following.
+Use ``(1),'' not ``Eq. (1)'' or ``Equation (1),''
+except at the beginning of a sentence: ``Equation (1) is ...''.
+
+   \begin{figure}[thpb]
+      \centering
+      %\includegraphics[scale=1.0]{figurefile}
+      \caption{caption}
+      \label{figurelabel}
+   \end{figure}
+
+
+
+\section{Conclusions}
+
+\subsection{Conclusions}
+
+
+
+
+
+\section{Acknowledgements}
+
+The authors gratefully acknowledge the contribution of reviewers' comments, etc. (if desired). Put sponsor acknowledgments in the unnumbered footnote on the first page.
+
+
+References are important to the reader; therefore, each citation must be complete and correct. If at all possible, references should be commonly available publications.
+
+\begin{thebibliography}{99}
+
+\bibitem{c1}
+J.G.F. Francis, The QR Transformation I, {\it Comput. J.}, vol. 4, 1961, pp 265-271.
+
+\bibitem{c2}
+H. Kwakernaak and R. Sivan, {\it Modern Signals and Systems}, Prentice Hall, Englewood Cliffs, NJ; 1991.
+
+\bibitem{c3}
+D. Boley and R. Maier, "A Parallel QR Algorithm for the Non-Symmetric Eigenvalue Algorithm", {\it in Third SIAM Conference on Applied Linear Algebra}, Madison, WI, 1988, pp. A20.
+
+\end{thebibliography}
+
+\end{document}
