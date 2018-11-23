@@ -6,6 +6,7 @@ from __future__ import absolute_import
 
 import sys, os, shutil
 
+import pandas as pd
 import numpy as np
 from scipy.stats import pearsonr
 
@@ -71,6 +72,7 @@ def train(loader, model, criterion, optimizer, epoch, args):
     return loss
 
 def evaluate(loader, model, criterion, args):
+    pred = []
     seq_num, data_num = 0, 0
     loss, corr, ccc = 0.0, 0.0, 0.0
     model.eval()
@@ -103,17 +105,25 @@ def evaluate(loader, model, criterion, args):
             output = torch.cumsum(output, dim=1)
         # Compute Pearson correlation and CCC for each sample
         for i in range(0, batch_size):
-            y_true = target[i,:lengths[i]].view(-1)
-            y_pred = output[i,:lengths[i]].view(-1)
-            corr += pearsonr(y_true.cpu().numpy(), y_pred.cpu().numpy())[0]
-            ccc += eval_ccc(y_true.cpu().numpy(), y_pred.cpu().numpy())
+            y_true = target[i,:lengths[i]].view(-1).cpu().numpy()
+            y_pred = output[i,:lengths[i]].view(-1).cpu().numpy()
+            corr += pearsonr(y_true, y_pred)[0]
+            ccc += eval_ccc(y_true, y_pred)
+            pred.append(y_pred)
     # Average losses and print
     loss /= data_num
     corr /= seq_num
     ccc /= seq_num
     print('Evaluation\tLoss: {:2.5f}\tCorr: {:0.3f}\tCCC: {:0.3f}'.\
           format(loss, corr, ccc))
-    return loss, corr, ccc
+    return pred, loss, corr, ccc
+
+def save_predictions(pred, dataset):
+    for p, subj, story in zip(pred, dataset.subjects, dataset.stories):
+        p = np.repeat(p, 25)
+        df = pd.DataFrame(p, columns=['valence'])
+        fname = "Subject_{}_Story_{}.csv".format(subj, story)
+        df.to_csv(os.path.join("./predictions", fname), index=False)
 
 def save_checkpoint(model, path):
     torch.save(model.state_dict(), path)
@@ -156,7 +166,7 @@ if __name__ == "__main__":
         os.path.join(train_folder,"CombinedVisual"),
         os.path.join(train_folder,"Annotations")
     )
-    test_folder = "./data/Training"
+    test_folder = "./data/Validation"
     test_data = datasets.OMGcombined(
         os.path.join(test_folder,"CombinedAudio"),
         os.path.join(test_folder,"CombinedText"),
@@ -166,12 +176,14 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_data, batch_size=args.batch_size,
                               shuffle=True, collate_fn=datasets.collate_fn)
     test_loader = DataLoader(test_data, batch_size=args.batch_size,
-                             shuffle=True, collate_fn=datasets.collate_fn)
+                             shuffle=False, collate_fn=datasets.collate_fn)
     print("Done.")
     
-    # Create path to save models
+    # Create path to save models and predictions
     if not os.path.exists('./models'):
         os.makedirs('./models')
+    if not os.path.exists('./predictions'):
+        os.makedirs('./predictions')
     
     # Construct audio-text-visual LSTM model
     model = CombinedLSTM(use_cuda=args.cuda)
@@ -184,7 +196,8 @@ if __name__ == "__main__":
     if args.test:
         load_checkpoint(model, args.model, args.cuda)
         with torch.no_grad():
-            evaluate(test_loader, model, criterion, args)
+            pred, _, _, _ = evaluate(test_loader, model, criterion, args)
+        save_predictions(pred, test_data)
         sys.exit(0)
     
     # Otherwise train and save best model
@@ -193,7 +206,8 @@ if __name__ == "__main__":
         print('---')
         train(train_loader, model, criterion, optimizer, epoch, args)
         with torch.no_grad():
-            loss, corr, ccc = evaluate(test_loader, model, criterion, args)
+            pred, loss, corr, ccc =\
+                evaluate(test_loader, model, criterion, args)
         if ccc > best_ccc:
             best_ccc = ccc
             save_checkpoint(model, "./models/best.save")
