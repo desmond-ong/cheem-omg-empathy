@@ -102,13 +102,13 @@ class OMGcombined(Dataset):
                 self.visual_data[i], self.valence_data[i])
     
 if __name__ == "__main__":
+    # Test code by loading dataset
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--folder', type=str, default="./data/Training",
                         help='dataset base folder')
     args = parser.parse_args()
 
-    # Test code by loading dataset
     audio_path = os.path.join(args.folder, "CombinedAudio")
     text_path = os.path.join(args.folder, "CombinedText")
     visual_path = os.path.join(args.folder, "CombinedVisual")
