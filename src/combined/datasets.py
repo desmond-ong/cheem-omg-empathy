@@ -11,25 +11,28 @@ from torch.utils.data import Dataset
 
 def collate_fn(data):
     """Collates variable length sequences into padded batch tensor."""
-    def merge(sequences):
+    def merge(sequences, max_len=None):
         dims = sequences[0].shape[1]
         lengths = [len(seq) for seq in sequences]
-        padded_seqs = torch.zeros(len(sequences), max(lengths), dims)
+        if max_len is None:
+            max_len = max(lengths)
+        padded_seqs = torch.zeros(len(sequences), max_len, dims)
         for i, seq in enumerate(sequences):
             end = lengths[i]
             padded_seqs[i, :end, :] = torch.from_numpy(seq[:end,:])
-        return padded_seqs, lengths
+        return padded_seqs
 
-    data.sort(key=lambda x: len(x[0]), reverse=True)
-    x_seqs, y_seqs = zip(*data)
-    x, x_lengths = merge(x_seqs)
-    y, y_lengths = merge(y_seqs)
-    if x_lengths != y_lengths:
-        print("Warning: input and output have different sequence lengths.")
-        lengths = [max(xl, yl) for xl, yl in zip(x_lengths, y_lengths)]
-    else:
-        lengths = x_lengths
-    return x, y, lengths
+    padded = []
+    lengths = np.zeros(len(data), dtype=int)
+    # data.sort(key=lambda x: len(x[0]), reverse=True)
+    data = zip(*data)
+    for modality in data:
+        m_lengths = [len(seq) for seq in modality]
+        lengths = np.maximum(lengths, m_lengths)
+    lengths = list(lengths)
+    for modality in data:
+        padded.append(merge(modality, max(lengths)))
+    return tuple(padded + [lengths])
 
 class OMGcombined(Dataset):
     """Dataset that loads features for each modality and valence ratings.
@@ -116,6 +119,13 @@ if __name__ == "__main__":
 
     print("Loading data...")
     dataset = OMGcombined(audio_path, text_path, visual_path, valence_path)
+    print("Testing batch collation...")
+    data = collate_fn([dataset[i] for i in range(min(10, len(dataset)))])
+    print("Batch shapes:")
+    for d in data[:-1]:
+        print(d.shape)
+    print("Sequence lengths: ", data[-1])
+    print("Checking through data for mismatched sequence lengths...")
     for i, data in enumerate(dataset):
         audio, text, visual, valence = data
         print("#{}\tSubject: {}\tStory: {}:".\
