@@ -10,7 +10,7 @@ class CombinedLSTM(nn.Module):
     """Basic audio-text-visual LSTM model with feature level fusion."""
     
     def __init__(self, audio_size=990, text_size=300, visual_size=4096,
-                 embed_size=128, hidden_size=128, n_layers=1, use_cuda=False):
+                 embed_size=128, hidden_size=512, n_layers=1, use_cuda=False):
         super(CombinedLSTM, self).__init__()
         self.audio_size = audio_size
         self.text_size = text_size

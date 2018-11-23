@@ -24,7 +24,7 @@ def collate_fn(data):
 
     padded = []
     lengths = np.zeros(len(data), dtype=int)
-    # data.sort(key=lambda x: len(x[0]), reverse=True)
+    data.sort(key=lambda x: len(x[0]), reverse=True)
     data = zip(*data)
     for modality in data:
         m_lengths = [len(seq) for seq in modality]
