@@ -73,7 +73,8 @@ class OMGcombined(Dataset):
             raise Exception("Number of files do not match.")
 
         # Store subject and story IDs
-        self.subjects, self.stories = [], []
+        self.subjects = []
+        self.stories = []
         for fn in sorted(os.listdir(self.valence_path)):
             match = re.match(pattern, fn)
             if match:
@@ -85,6 +86,7 @@ class OMGcombined(Dataset):
         self.text_data = []
         self.visual_data = []
         self.valence_data = []
+        self.n_frames = []
         for f_au, f_te, f_vi, f_va in zip(audio_files, text_files,
                                           visual_files, valence_files):
             # Load each input modality
@@ -93,6 +95,7 @@ class OMGcombined(Dataset):
             self.visual_data.append(np.load(f_vi).squeeze(1))
             # Load valence ratings and average across time chunks
             valence = pd.read_csv(f_va)
+            self.n_frames.append(len(valence))
             group_idx = np.arange(len(valence)) // self.ratio
             valence = np.array(valence.groupby(group_idx).mean())
             self.valence_data.append(valence)

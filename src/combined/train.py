@@ -119,8 +119,10 @@ def evaluate(loader, model, criterion, args):
     return pred, loss, corr, ccc
 
 def save_predictions(pred, dataset):
-    for p, subj, story in zip(pred, dataset.subjects, dataset.stories):
+    for p, subj, story, n_frames in zip(pred, dataset.subjects,
+                                        dataset.stories, dataset.n_frames):
         p = np.repeat(p, 25)
+        p = p[:n_frames]
         df = pd.DataFrame(p, columns=['valence'])
         fname = "Subject_{}_Story_{}.csv".format(subj, story)
         df.to_csv(os.path.join("./predictions", fname), index=False)
