@@ -100,10 +100,10 @@ class OMGcombined(Dataset):
             valence = np.array(valence.groupby(group_idx).mean())
             # Split data to create more examples
             if split_ratio > 1:
-                audio = np.split_array(audio, split_ratio, axis=0)
-                text = np.split_array(text, split_ratio, axis=0)
-                visual = np.split_array(visual, split_ratio, axis=0)
-                valence = np.split_array(valence, split_ratio, axis=0)
+                audio = np.array_split(audio, split_ratio, axis=0)
+                text = np.array_split(text, split_ratio, axis=0)
+                visual = np.array_split(visual, split_ratio, axis=0)
+                valence = np.array_split(valence, split_ratio, axis=0)
             else:
                 audio, text, visual, valence =\
                     [audio], [text], [visual], [valence]
