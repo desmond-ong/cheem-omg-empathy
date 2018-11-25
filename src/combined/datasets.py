@@ -44,7 +44,7 @@ class OMGcombined(Dataset):
     
     def __init__(self, audio_path, text_path, visual_path, valence_path,
                  transform=None, pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
-                 fps = 25.0, chunk_dur=1.0):
+                 fps=25.0, chunk_dur=1.0, split_ratio=1):
         self.audio_path = audio_path
         self.text_path = text_path
         self.visual_path = visual_path
@@ -90,15 +90,27 @@ class OMGcombined(Dataset):
         for f_au, f_te, f_vi, f_va in zip(audio_files, text_files,
                                           visual_files, valence_files):
             # Load each input modality
-            self.audio_data.append(np.array(pd.read_csv(f_au)))
-            self.text_data.append(np.load(f_te))
-            self.visual_data.append(np.load(f_vi).squeeze(1))
+            audio = np.array(pd.read_csv(f_au))
+            text = np.load(f_te)
+            visual = np.load(f_vi).squeeze(1)
             # Load valence ratings and average across time chunks
             valence = pd.read_csv(f_va)
             self.n_frames.append(len(valence))
             group_idx = np.arange(len(valence)) // self.ratio
             valence = np.array(valence.groupby(group_idx).mean())
-            self.valence_data.append(valence)
+            # Split data to create more examples
+            if split_ratio > 1:
+                audio = np.split_array(audio, split_ratio, axis=0)
+                text = np.split_array(text, split_ratio, axis=0)
+                visual = np.split_array(visual, split_ratio, axis=0)
+                valence = np.split_array(valence, split_ratio, axis=0)
+            else:
+                audio, text, visual, valence =\
+                    [audio], [text], [visual], [valence]
+            self.audio_data += audio
+            self.text_data += text
+            self.visual_data += visual
+            self.valence_data += valence
 
     def __len__(self):
         return len(self.valence_data)
