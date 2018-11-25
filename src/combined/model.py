@@ -21,19 +21,19 @@ class CombinedLSTM(nn.Module):
         # Create raw-to-embed FC+Dropout layer for each modality
         self.a_to_embed = nn.Sequential(nn.Dropout(p=0.1),
                                         nn.Linear(audio_size, embed_size),
-                                        nn.ReLu())
+                                        nn.ReLU())
         self.t_to_embed = nn.Sequential(nn.Dropout(p=0.1),
                                         nn.Linear(text_size, embed_size),
-                                        nn.ReLu())
+                                        nn.ReLU())
         self.v_to_embed = nn.Sequential(nn.Dropout(p=0.0),
                                         nn.Linear(visual_size, embed_size),
-                                        nn.ReLu())
+                                        nn.ReLU())
         # LSTM computes hidden states from embeddings for each modality
         self.lstm = nn.LSTM(3 * embed_size, hidden_size,
                             n_layers, batch_first=True)
         # Regression network from LSTM hidden states to predicted valence
         self.h_to_out = nn.Sequential(nn.Linear(hidden_size, embed_size),
-                                      nn.ReLu(),
+                                      nn.ReLU(),
                                       nn.Linear(embed_size, 1))
         # Enable CUDA if flag is set
         self.use_cuda = use_cuda
