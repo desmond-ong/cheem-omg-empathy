@@ -10,8 +10,6 @@ import torch
 import torch.nn as nn
 import torch.utils
 import torch.utils.data
-from torchvision import datasets, transforms
-from torch.autograd import Variable
 
 class VRNN(nn.Module):
     def __init__(self, audio_dim=990, text_dim=300, visual_dim=4096,
@@ -258,11 +256,17 @@ class VRNN(nn.Module):
 
 
     def loss(self, inputs, val_obs, infer, prior, recon, val, mask=1,
-             kld_mult=1.0, rec_mults=(1.0, 1.0, 1.0), sup_mult=1.0):
+             kld_mult=1.0, rec_mults=(1.0, 1.0, 1.0), sup_mult=1.0, avg=True):
         loss = 0.0
-        loss += kld_mult * kld_loss(infer, prior, mask)
-        loss += rec_loss(infer, prior, mask, rec_mults)
-        loss += sup_mult * sup_loss(val, val_obs, mask)
+        loss += kld_mult * self.kld_loss(infer, prior, mask)
+        loss += self.rec_loss(inputs, recon, mask, rec_mults)
+        loss += sup_mult * self.sup_loss(val, val_obs, mask)
+        if avg:
+            if type(mask) is torch.Tensor:
+                n_data = torch.sum(mask)
+            else:
+                n_data = val_obs.numel()
+            loss /= n_data
         return loss
 
     
@@ -307,7 +311,6 @@ class VRNN(nn.Module):
     def _sample_gauss(self, mean, std):
         """Use std to sample."""
         eps = torch.FloatTensor(std.size()).normal_()
-        eps = Variable(eps)
         return eps.mul(std).add_(mean)
 
 
@@ -328,3 +331,38 @@ class VRNN(nn.Module):
         nll_element = ( ((x-mean).pow(2)) / (2 * std.pow(2)) + std.log() +
                         math.log(math.sqrt(2 * math.pi)) ) * mask
         return torch.sum(nll_element)
+
+    
+if __name__ == "__main__":
+    # Test code by loading dataset and running through model
+    import os
+    from datasets import OMGcombined
+    
+    base_folder = "./data/Training"
+    audio_path = os.path.join(base_folder, "CombinedAudio")
+    text_path = os.path.join(base_folder, "CombinedText")
+    visual_path = os.path.join(base_folder, "CombinedVisual")
+    valence_path = os.path.join(base_folder, "Annotations")
+
+    print("Loading data...")
+    dataset = OMGcombined(audio_path, text_path, visual_path, valence_path)
+
+    print("Building model...")
+    model = VRNN()
+    model.eval()
+
+    print("Passing a sample through the model...")
+    audio, text, visual, valence = dataset[0]
+    audio = torch.tensor(audio).unsqueeze(1).float()
+    text = torch.tensor(text).unsqueeze(1).float()
+    visual = torch.tensor(visual).unsqueeze(1).float()
+    valence = torch.tensor(valence).unsqueeze(1).float()
+
+    infer, prior, recon, val = model(audio, text, visual)
+    val_mean, val_std = val
+    loss = model.loss((audio, text, visual), valence,
+                      infer, prior, recon, val)
+    print("Average loss: {:0.3f}".format(loss))
+    print("Predicted valences:")
+    for v in val_mean:
+        print("{:+0.3f}".format(v.item()))
