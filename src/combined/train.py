@@ -156,11 +156,13 @@ if __name__ == "__main__":
     parser.add_argument('--save_freq', type=int, default=5, metavar='N',
                         help='how many epochs to wait before saving')
     parser.add_argument('--cuda', action='store_true', default=False,
-                        help='enables CUDA training')
+                        help='enables CUDA training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
-                        help='whether to predict differences')
+                        help='whether to predict differences (default: false)')
+    parser.add_argument('--resume', action='store_true', default=False,
+                        help='resume training loaded model (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
-                        help='evaluate without training')
+                        help='evaluate without training (default: false)')
     parser.add_argument('--test_path', type=str, default="./data/Validation",
                         help='path to test data (default: ./data/Validation)')
     parser.add_argument('--model', type=str, default="./models/best.save",
@@ -211,8 +213,12 @@ if __name__ == "__main__":
             pred, _, _, _ = evaluate(test_loader, model, criterion, args)
         save_predictions(pred, test_data)
         sys.exit(0)
-    
-    # Otherwise train and save best model
+
+    # Load model if continue flag is set
+    if args.resume:
+        load_checkpoint(model, args.model, args.cuda)
+        
+    # Train and save best model
     best_ccc = -2
     for epoch in range(1, args.epochs + 1):
         print('---')
