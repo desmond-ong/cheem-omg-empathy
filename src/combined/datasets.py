@@ -50,7 +50,8 @@ class OMGcombined(Dataset):
         self.visual_path = visual_path
         self.valence_path = valence_path
         self.pattern = pattern
-        self.ratio = fps * chunk_dur
+        self.time_ratio = fps * chunk_dur
+        self.split_ratio = split_ratio
 
         # Load files into list
         audio_files = [os.path.join(audio_path, fn) for fn
@@ -86,17 +87,18 @@ class OMGcombined(Dataset):
         self.text_data = []
         self.visual_data = []
         self.valence_data = []
-        self.n_frames = []
+        self.valence_orig = []
         for f_au, f_te, f_vi, f_va in zip(audio_files, text_files,
                                           visual_files, valence_files):
             # Load each input modality
             audio = np.array(pd.read_csv(f_au))
             text = np.load(f_te)
             visual = np.load(f_vi).squeeze(1)
-            # Load valence ratings and average across time chunks
+            # Load and store original valence ratings
             valence = pd.read_csv(f_va)
-            self.n_frames.append(len(valence))
-            group_idx = np.arange(len(valence)) // self.ratio
+            self.valence_orig.append(np.array(valence).flatten())
+            # Average valence across time chunks
+            group_idx = np.arange(len(valence)) // self.time_ratio
             valence = np.array(valence.groupby(group_idx).mean())
             # Split data to create more examples
             if split_ratio > 1:

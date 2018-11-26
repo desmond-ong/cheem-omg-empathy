@@ -103,13 +103,21 @@ def evaluate(loader, model, criterion, args):
         # Sum predicted differences
         if args.diff:
             output = torch.cumsum(output, dim=1)
-        # Compute Pearson correlation and CCC for each sample
+        # Store predictions
         for i in range(0, batch_size):
-            y_true = target[i,:lengths[i]].view(-1).cpu().numpy()
-            y_pred = output[i,:lengths[i]].view(-1).cpu().numpy()
-            corr += pearsonr(y_true, y_pred)[0]
-            ccc += eval_ccc(y_true, y_pred)
-            pred.append(y_pred)
+            pred_i = output[i,:lengths[i]].view(-1).cpu().numpy()
+            pred.append(pred_i)
+    # Compute CCC of predictions with original unsmoothed data
+    time_ratio = loader.dataset.time_ratio
+    true = loader.dataset.valence_orig
+    for i in range(len(pred)):
+        # Repeat and pad predictions to match original data length
+        pred[i] = np.repeat(pred[i], time_ratio)[:len(true[i])]
+        l_diff = len(true[i]) - len(pred[i])
+        if l_diff > 0:
+            pred[i] = np.concatenate([pred[i], pred[i][-l_diff:]])
+        corr += pearsonr(true[i], pred[i])[0]
+        ccc += eval_ccc(true[i], pred[i])
     # Average losses and print
     loss /= data_num
     corr /= seq_num
@@ -119,12 +127,8 @@ def evaluate(loader, model, criterion, args):
     return pred, loss, corr, ccc
 
 def save_predictions(pred, dataset):
-    for p, subj, story, n_frames in zip(pred, dataset.subjects,
-                                        dataset.stories, dataset.n_frames):
-        p = np.repeat(p, 25)[:n_frames]
-        buf = np.zeros(n_frames)
-        buf[:len(p)] = p
-        df = pd.DataFrame(buf, columns=['valence'])
+    for p, subj, story in zip(pred, dataset.subjects, dataset.stories):
+        df = pd.DataFrame(p, columns=['valence'])
         fname = "Subject_{}_Story_{}.csv".format(subj, story)
         df.to_csv(os.path.join("./predictions", fname), index=False)
 
@@ -157,6 +161,8 @@ if __name__ == "__main__":
                         help='whether to predict differences')
     parser.add_argument('--test', action='store_true', default=False,
                         help='evaluate without training')
+    parser.add_argument('--test_path', type=str, default="./data/Validation",
+                        help='path to test data (default: ./data/Validation)')
     parser.add_argument('--model', type=str, default="./models/best.save",
                         help='path to trained model')
     args = parser.parse_args()
@@ -172,7 +178,7 @@ if __name__ == "__main__":
         os.path.join(train_folder,"Annotations"),
         split_ratio=args.split
     )
-    test_folder = "./data/Validation"
+    test_folder = args.test_path
     test_data = datasets.OMGcombined(
         os.path.join(test_folder,"CombinedAudio"),
         os.path.join(test_folder,"CombinedText"),
@@ -181,7 +187,7 @@ if __name__ == "__main__":
     )
     train_loader = DataLoader(train_data, batch_size=args.batch_size,
                               shuffle=True, collate_fn=datasets.collate_fn)
-    test_loader = DataLoader(test_data, batch_size=args.batch_size,
+    test_loader = DataLoader(test_data, batch_size=1,
                              shuffle=False, collate_fn=datasets.collate_fn)
     print("Done.")
     
