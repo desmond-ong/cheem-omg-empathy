@@ -136,7 +136,7 @@ def evaluate(loader, model, args):
     print('Evaluation\tKLD: {:7.1f}\tRecon: {:7.1f}\tSup: {:7.1f}'.\
           format(*losses))
     # Average statistics and print
-    mse /= data_num
+    mse /= sum([len(t) for t in true])
     corr /= seq_num
     ccc /= seq_num
     stats = mse, corr, ccc
@@ -162,14 +162,14 @@ def load_checkpoint(model, path, use_cuda=False):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=5, metavar='N',
-                        help='input batch size for training (default: 5)')
-    parser.add_argument('--split', type=int, default=1, metavar='N',
-                        help='sections to split each video into (default: 1)')
-    parser.add_argument('--epochs', type=int, default=500, metavar='N',
-                        help='number of epochs to train (default: 500)')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
-                        help='learning rate (default: 1e-5)')
+    parser.add_argument('--batch_size', type=int, default=25, metavar='N',
+                        help='input batch size for training (default: 25)')
+    parser.add_argument('--split', type=int, default=5, metavar='N',
+                        help='sections to split each video into (default: 5)')
+    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
+                        help='number of epochs to train (default: 1000)')
+    parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
+                        help='learning rate (default: 1e-3)')
     parser.add_argument('--save_freq', type=int, default=5, metavar='N',
                         help='how many epochs to wait before saving')
     parser.add_argument('--cuda', action='store_true', default=False,
