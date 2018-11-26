@@ -9,6 +9,12 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+def len_to_mask(lengths):
+    """Converts list of sequence lengths to a mask tensor."""
+    mask = torch.arange(max(lengths)).expand(len(lengths), max(lengths))
+    mask = mask < torch.tensor(lengths).unsqueeze(1)
+    return mask
+
 def collate_fn(data):
     """Collates variable length sequences into padded batch tensor."""
     def merge(sequences, max_len=None):

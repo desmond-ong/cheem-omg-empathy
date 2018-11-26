@@ -117,35 +117,19 @@ class VRNN(nn.Module):
         seq_length = audio.size(0)
         batch_size = audio.size(1)
 
-        # Initialize tensors for prior and inferred z
-        prior_mean = torch.zeros(seq_length, batch_size, self.z_dim)
-        prior_std = torch.zeros(seq_length, batch_size, self.z_dim)
-        infer_mean = torch.zeros(seq_length, batch_size, self.z_dim)
-        infer_std = torch.zeros(seq_length, batch_size, self.z_dim)        
+        # Initialize list accumulators
+        prior_mean, prior_std = [], []
+        infer_mean, infer_std = [], []
 
-        # Initialize tensors for reconstructed inputs
-        audio_mean = torch.zeros(seq_length, batch_size, self.audio_dim)
-        audio_std = torch.zeros(seq_length, batch_size, self.audio_dim)
-        text_mean = torch.zeros(seq_length, batch_size, self.text_dim)
-        text_std = torch.zeros(seq_length, batch_size, self.text_dim)
-        visual_mean = torch.zeros(seq_length, batch_size, self.visual_dim)
-        visual_std = torch.zeros(seq_length, batch_size, self.visual_dim)
+        audio_mean, audio_std = [], []
+        text_mean, text_std = [], []
+        visual_mean, visual_std = [], []
 
-        # Initialize tensor for predicted output
-        val_mean = torch.zeros(seq_length, batch_size, 1)
-        val_std = torch.zeros(seq_length, batch_size, 1)
+        val_mean, val_std = [], []
         
         # Initialize hidden state
         h = torch.zeros(self.n_layers, batch_size, self.h_dim)
-
-        # Put tensors in CUDA memory
         if self.use_cuda:
-            prior_mean, prior_std = prior_mean.cuda(), prior_std.cuda()
-            infer_mean, infer_std = infer_mean.cuda(), infer_std.cuda()
-            audio_mean, audio_std = audio_mean.cuda(), audio_std.cuda()
-            text_mean, text_std = text_mean.cuda(), text_std.cuda()
-            visual_mean, visual_std = visual_mean.cuda(), visual_std.cuda()
-            val_mean, val_std = val_mean.cuda(), val_std.cuda()
             h = h.cuda()
             
         for t in range(seq_length):
@@ -157,13 +141,13 @@ class VRNN(nn.Module):
             
             # Encode features to latent code z
             infer_t = self.enc(torch.cat([phi_all_t, h[-1]], 1))
-            infer_mean[t] = self.enc_mean(infer_t)
-            infer_std[t] = self.enc_std(infer_t)
+            infer_mean.append(self.enc_mean(infer_t))
+            infer_std.append(self.enc_std(infer_t))
 
             # Compute prior for z
             prior_t = self.prior(h[-1])
-            prior_mean[t] = self.prior_mean(prior_t)
-            prior_std[t] = self.prior_std(prior_t)
+            prior_mean.append(self.prior_mean(prior_t))
+            prior_std.append(self.prior_std(prior_t))
 
             # Sample and reparameterize
             z_t = self._sample_gauss(infer_mean[t], infer_std[t])
@@ -173,31 +157,31 @@ class VRNN(nn.Module):
             dec_in_t = torch.cat([phi_z_t, h[-1]], 1)
 
             audio_t = self.dec_audio(dec_in_t)
-            audio_mean[t] = self.dec_audio_mean(audio_t)
-            audio_std[t] = self.dec_audio_std(audio_t)
+            audio_mean.append(self.dec_audio_mean(audio_t))
+            audio_std.append(self.dec_audio_std(audio_t))
 
             text_t = self.dec_text(dec_in_t)
-            text_mean[t] = self.dec_text_mean(text_t)
-            text_std[t] = self.dec_text_std(text_t)
+            text_mean.append(self.dec_text_mean(text_t))
+            text_std.append(self.dec_text_std(text_t))
 
             visual_t = self.dec_visual(dec_in_t)
-            visual_mean[t] = self.dec_visual_mean(visual_t)
-            visual_std[t] = self.dec_visual_std(visual_t)
+            visual_mean.append(self.dec_visual_mean(visual_t))
+            visual_std.append(self.dec_visual_std(visual_t))
 
             # Decode z to predict valence
             val_t = self.dec_val(dec_in_t)
-            val_mean[t] = self.dec_val_mean(val_t)
-            val_std[t] = self.dec_val_std(val_t)
+            val_mean.append(self.dec_val_mean(val_t))
+            val_std.append(self.dec_val_std(val_t))
             
             # Recurrence
             _, h = self.rnn(torch.cat([phi_all_t, phi_z_t], 1).unsqueeze(0), h)
 
-        infer = (infer_mean, infer_std)
-        prior = (prior_mean, prior_std)
-        recon = (audio_mean, audio_std,
-                 text_mean, text_std,
-                 visual_mean, visual_std)
-        val = (val_mean, val_std)
+        infer = (torch.stack(infer_mean), torch.stack(infer_std))
+        prior = (torch.stack(prior_mean), torch.stack(prior_std))
+        recon = (torch.stack(audio_mean), torch.stack(audio_std),
+                 torch.stack(text_mean), torch.stack(text_std),
+                 torch.stack(visual_mean), torch.stack(visual_std))
+        val = (torch.stack(val_mean), torch.stack(val_std))
         return infer, prior, recon, val
 
     
@@ -256,7 +240,7 @@ class VRNN(nn.Module):
 
 
     def loss(self, inputs, val_obs, infer, prior, recon, val, mask=1,
-             kld_mult=1.0, rec_mults=(1.0, 1.0, 1.0), sup_mult=1.0, avg=True):
+             kld_mult=1.0, rec_mults=(1.0, 1.0, 1.0), sup_mult=1.0, avg=False):
         loss = 0.0
         loss += kld_mult * self.kld_loss(infer, prior, mask)
         loss += self.rec_loss(inputs, recon, mask, rec_mults)
@@ -270,7 +254,7 @@ class VRNN(nn.Module):
         return loss
 
     
-    def kld_loss(self, infer, prior, mask=1):
+    def kld_loss(self, infer, prior, mask=None):
         """KLD loss between inferred and prior z."""
         infer_mean, infer_std = infer
         prior_mean, prior_std = prior
@@ -278,7 +262,7 @@ class VRNN(nn.Module):
                                prior_mean, prior_std, mask)
 
     
-    def rec_loss(self, inputs, recon, mask=1, lambdas=(1.0, 1.0, 1.0)):
+    def rec_loss(self, inputs, recon, mask=None, lambdas=(1.0, 1.0, 1.0)):
         """Input reconstruction loss."""
         audio, text, visual = inputs
         audio_mean, audio_std = recon[:2]
@@ -293,10 +277,10 @@ class VRNN(nn.Module):
         return loss
 
     
-    def sup_loss(self, val_params, val_obs, mask=1):
+    def sup_loss(self, val_params, val_obs, mask=None):
         """Supervised prediction loss."""
         val_mean, val_std = val_params
-        return self._nll_gauss(val_mean, val_std, val_obs)
+        return self._nll_gauss(val_mean, val_std, val_obs, mask)
     
     
     def reset_parameters(self, stdv=1e-1):
@@ -311,25 +295,33 @@ class VRNN(nn.Module):
     def _sample_gauss(self, mean, std):
         """Use std to sample."""
         eps = torch.FloatTensor(std.size()).normal_()
+        if self.use_cuda:
+            eps = eps.cuda()
         return eps.mul(std).add_(mean)
 
 
-    def _kld_gauss(self, mean_1, std_1, mean_2, std_2, mask=1):
+    def _kld_gauss(self, mean_1, std_1, mean_2, std_2, mask=None):
         """Use std to compute KLD"""
         kld_element =  (2 * torch.log(std_2) - 2 * torch.log(std_1) + 
             (std_1.pow(2) + (mean_1 - mean_2).pow(2)) /
             std_2.pow(2) - 1)
+        if mask is not None:
+            kld_element = kld_element.masked_select(mask)
         return  0.5 * torch.sum(kld_element)
 
 
-    def _nll_bernoulli(self, theta, x, mask=1):
-        nll_element = x*torch.log(theta) + (1-x)*torch.log(1-theta) * mask
+    def _nll_bernoulli(self, theta, x, mask=None):
+        nll_element = x*torch.log(theta) + (1-x)*torch.log(1-theta)
+        if mask is not None:
+            nll_element = nll_element.masked_select(mask)
         return torch.sum(nll_element)
 
 
-    def _nll_gauss(self, mean, std, x, mask=1):
+    def _nll_gauss(self, mean, std, x, mask=None):
         nll_element = ( ((x-mean).pow(2)) / (2 * std.pow(2)) + std.log() +
-                        math.log(math.sqrt(2 * math.pi)) ) * mask
+                        math.log(math.sqrt(2 * math.pi)) )
+        if mask is not None:
+            nll_element = nll_element.masked_select(mask)
         return torch.sum(nll_element)
 
     
@@ -356,11 +348,11 @@ if __name__ == "__main__":
     audio = torch.tensor(audio).unsqueeze(1).float()
     text = torch.tensor(text).unsqueeze(1).float()
     visual = torch.tensor(visual).unsqueeze(1).float()
-    valence = torch.tensor(valence).unsqueeze(1).float()
+    val_obs = torch.tensor(valence).unsqueeze(1).float()
 
     infer, prior, recon, val = model(audio, text, visual)
     val_mean, val_std = val
-    loss = model.loss((audio, text, visual), valence,
+    loss = model.loss((audio, text, visual), val_obs,
                       infer, prior, recon, val)
     print("Average loss: {:0.3f}".format(loss))
     print("Predicted valences:")

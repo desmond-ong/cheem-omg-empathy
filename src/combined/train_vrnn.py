@@ -1,4 +1,4 @@
-"""Training code for combined LSTM model."""
+"""Training code for VRNN model."""
 
 from __future__ import division
 from __future__ import print_function
@@ -17,7 +17,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 import datasets
-from model import CombinedLSTM
+from vrnn import VRNN
 
 def eval_ccc(y_true, y_pred):
     """Computes concordance correlation coefficient."""
@@ -29,83 +29,92 @@ def eval_ccc(y_true, y_pred):
     ccc = 2*covar / (true_var + pred_var +  (pred_mean-true_mean) ** 2)
     return ccc
 
-def train(loader, model, criterion, optimizer, epoch, args):
+def train(loader, model, optimizer, epoch, args):
     data_num = 0
     loss= 0.0
     model.train()
+    # Iterate over batches
     for batch_num, batch in enumerate(loader):
         batch = list(batch)
         batch_size = len(batch[-1])
-        # Convert to float
-        if batch_size == 1:
-            for i in range(len(batch)-1):
+        # Transform inputs
+        for i in range(len(batch)-1):
+            # Convert to float
+            if batch_size == 1:
                 batch[i] = batch[i].float()
-        # Convert to CUDA
-        if args.cuda:
-            for i in range(len(batch)-1):
+            # Convert to CUDA
+            if args.cuda:
                 batch[i] = batch[i].cuda()
+            # Permute so time dimension is first
+            batch[i] = batch[i].permute(1, 0, 2)
         # Unpack batch
-        audio, text, visual, target, lengths = batch
-        # Compute differences for target
-        if args.diff:
-            target = target[:,1:] - target[:,:-1]
-            target = torch.cat([torch.zeros(batch_size, 1, 1), target], dim=1)
+        audio, text, visual, val_obs, lengths = batch
         # Run forward pass.
-        output = model(audio, text, visual, lengths)
+        infer, prior, recon, val = model(audio, text, visual)
+        # Create mask from sequence lengths
+        mask = datasets.len_to_mask(lengths).permute(1, 0).unsqueeze(-1)
+        if args.cuda:
+            mask = mask.cuda()
         # Compute loss and gradients
-        batch_loss = criterion(output, target)
-        loss += batch_loss
-        # Average over number of non-padding datapoints before stepping
-        batch_loss /= sum(lengths)
-        batch_loss.backward()
+        inputs = (audio, text, visual)
+        b_loss = model.loss(inputs, val_obs, infer, prior, recon, val, mask,
+                            args.kld_mult, args.rec_mults, args.sup_mult)
+        loss += b_loss
+        # Average over number of datapoints before stepping
+        b_loss /= sum(lengths)
+        b_loss.backward()
         # Step, then zero gradients
         optimizer.step()
         optimizer.zero_grad()
         # Keep track of total number of time-points
         data_num += sum(lengths)
-        print('Batch: {:5d}\tLoss: {:2.5f}'.\
+        print('Batch: {:5d}\tLoss: {:10.1f}'.\
               format(batch_num, loss/data_num))
     # Average losses and print
     loss /= data_num
     print('---')
-    print('Epoch: {}\tLoss: {:2.5f}'.format(epoch, loss))
+    print('Epoch: {}\tLoss: {:10.1f}'.format(epoch, loss))
     return loss
 
-def evaluate(loader, model, criterion, args):
+def evaluate(loader, model, args):
     pred = []
     seq_num, data_num = 0, 0
-    loss, corr, ccc = 0.0, 0.0, 0.0
+    kld_loss, rec_loss, sup_loss = 0.0, 0.0, 0.0
+    mse, corr, ccc = 0.0, 0.0, 0.0
     model.eval()
     for batch_num, batch in enumerate(loader):
         batch = list(batch)
         batch_size = len(batch[-1])
-        # Convert to float
-        if batch_size == 1:
-            for i in range(len(batch)-1):
+        # Transform inputs
+        for i in range(len(batch)-1):
+            # Convert to float
+            if batch_size == 1:
                 batch[i] = batch[i].float()
-        # Convert to CUDA
-        if args.cuda:
-            for i in range(len(batch)-1):
+            # Convert to CUDA
+            if args.cuda:
                 batch[i] = batch[i].cuda()
+            # Permute so time dimension is first
+            batch[i] = batch[i].permute(1, 0, 2)
         # Unpack batch
-        audio, text, visual, target, lengths = batch
-        # Run forward pass.
-        output = model(audio, text, visual, lengths)
-        # Compute loss and gradients
-        if args.diff:
-            batch_loss = criterion(output, diff)
-        else:
-            batch_loss = criterion(output, target)
-        loss += batch_loss
+        audio, text, visual, val_obs, lengths = batch
+        # Run forward pass
+        infer, prior, recon, val = model(audio, text, visual)
+        val_mean, val_std = val
+        # Create mask from sequence lengths
+        mask = datasets.len_to_mask(lengths).permute(1, 0).unsqueeze(-1)
+        if args.cuda:
+            mask = mask.cuda()
+        # Compute and store losses
+        inputs = (audio, text, visual)
+        kld_loss += model.kld_loss(infer, prior, mask)
+        rec_loss += model.rec_loss(inputs, recon, mask, args.rec_mults)
+        sup_loss += model.sup_loss(val, val_obs, mask)
         # Keep track of total number of time-points and sequences
         seq_num += batch_size
         data_num += sum(lengths)
-        # Sum predicted differences
-        if args.diff:
-            output = torch.cumsum(output, dim=1)
         # Store predictions
         for i in range(0, batch_size):
-            pred_i = output[i,:lengths[i]].view(-1).cpu().numpy()
+            pred_i = val_mean[:lengths[i],i].view(-1).cpu().numpy()
             pred.append(pred_i)
     # Compute CCC of predictions with original unsmoothed data
     time_ratio = loader.dataset.time_ratio
@@ -116,15 +125,23 @@ def evaluate(loader, model, criterion, args):
         l_diff = len(true[i]) - len(pred[i])
         if l_diff > 0:
             pred[i] = np.concatenate([pred[i], pred[i][-l_diff:]])
+        mse += ((true[i]-pred[i])**2).sum()
         corr += pearsonr(true[i], pred[i])[0]
         ccc += eval_ccc(true[i], pred[i])
     # Average losses and print
-    loss /= data_num
+    kld_loss /= data_num
+    rec_loss /= data_num
+    sup_loss /= data_num
+    losses = kld_loss, rec_loss, sup_loss
+    print('Evaluation\tKLD: {:7.1f}\tRecon: {:7.1f}\tSup: {:7.1f}'.\
+          format(*losses))
+    # Average statistics and print
+    mse /= data_num
     corr /= seq_num
     ccc /= seq_num
-    print('Evaluation\tLoss: {:2.5f}\tCorr: {:0.3f}\tCCC: {:0.3f}'.\
-          format(loss, corr, ccc))
-    return pred, loss, corr, ccc
+    stats = mse, corr, ccc
+    print('\t\tMSE: {:2.5f}\tCorr: {:0.3f}\tCCC: {:0.3f}'.format(*stats))
+    return pred, losses, stats
 
 def save_predictions(pred, dataset):
     for p, subj, story in zip(pred, dataset.subjects, dataset.stories):
@@ -157,8 +174,6 @@ if __name__ == "__main__":
                         help='how many epochs to wait before saving')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
-    parser.add_argument('--diff', action='store_true', default=False,
-                        help='whether to predict differences (default: false)')
     parser.add_argument('--resume', action='store_true', default=False,
                         help='resume training loaded model (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
@@ -199,18 +214,20 @@ if __name__ == "__main__":
     if not os.path.exists('./predictions'):
         os.makedirs('./predictions')
     
-    # Construct audio-text-visual LSTM model
-    model = CombinedLSTM(use_cuda=args.cuda)
+    # Construct multi-modal VRNN model
+    model = VRNN(use_cuda=args.cuda)
 
-    # Setup loss and optimizer
-    criterion = nn.MSELoss(reduction='sum')
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
+    # Setup optimizer and loss multipliers
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    args.kld_mult = 1.0
+    args.sup_mult = 1e5
+    args.rec_mults = (1/model.audio_dim, 1/model.text_dim, 1/model.visual_dim)
         
     # Evaluate model if test flag is set
     if args.test:
         load_checkpoint(model, args.model, args.cuda)
         with torch.no_grad():
-            pred, _, _, _ = evaluate(test_loader, model, criterion, args)
+            pred, _, _ = evaluate(test_loader, model, args)
         save_predictions(pred, test_data)
         sys.exit(0)
 
@@ -222,10 +239,10 @@ if __name__ == "__main__":
     best_ccc = -2
     for epoch in range(1, args.epochs + 1):
         print('---')
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        train(train_loader, model, optimizer, epoch, args)
         with torch.no_grad():
-            pred, loss, corr, ccc =\
-                evaluate(test_loader, model, criterion, args)
+            pred, losses, stats = evaluate(test_loader, model, args)
+            mse, corr, ccc = stats
         if ccc > best_ccc:
             best_ccc = ccc
             save_checkpoint(model, "./models/best.save")
