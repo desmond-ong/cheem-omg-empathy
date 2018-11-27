@@ -29,6 +29,12 @@ def eval_ccc(y_true, y_pred):
     ccc = 2*covar / (true_var + pred_var +  (pred_mean-true_mean) ** 2)
     return ccc
 
+def anneal(min_val, max_val, t, anneal_len):
+    if t >= anneal_len:
+        return max_val
+    else:
+        return (max_val - min_val) * t/anneal_len
+
 def train(loader, model, optimizer, epoch, args):
     data_num = 0
     loss= 0.0
@@ -37,6 +43,12 @@ def train(loader, model, optimizer, epoch, args):
     for batch_num, batch in enumerate(loader):
         batch = list(batch)
         batch_size = len(batch[-1])
+        # Anneal KLD and supervised loss multipliers
+        batch_tot = batch_num + epoch*len(loader)
+        kld_mult =\
+            anneal(0.0, args.kld_mult, batch_tot, args.kld_anneal*len(loader))
+        sup_mult =\
+            anneal(0.0, args.sup_mult, batch_tot, args.sup_anneal*len(loader))
         # Transform inputs
         for i in range(len(batch)-1):
             # Convert to float
@@ -58,7 +70,7 @@ def train(loader, model, optimizer, epoch, args):
         # Compute loss and gradients
         inputs = (audio, text, visual)
         b_loss = model.loss(inputs, val_obs, infer, prior, recon, val, mask,
-                            args.kld_mult, args.rec_mults, args.sup_mult)
+                            kld_mult, args.rec_mults, sup_mult)
         loss += b_loss
         # Average over number of datapoints before stepping
         b_loss /= sum(lengths)
@@ -73,7 +85,8 @@ def train(loader, model, optimizer, epoch, args):
     # Average losses and print
     loss /= data_num
     print('---')
-    print('Epoch: {}\tLoss: {:10.1f}'.format(epoch, loss))
+    print('Epoch: {}\tLoss: {:10.1f}\tB_KLD: {:0.3f}\tB_Sup: {:7.0f}'.\
+          format(epoch, loss, kld_mult, sup_mult))
     return loss
 
 def evaluate(loader, model, args):
@@ -166,10 +179,18 @@ if __name__ == "__main__":
                         help='input batch size for training (default: 25)')
     parser.add_argument('--split', type=int, default=5, metavar='N',
                         help='sections to split each video into (default: 5)')
-    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
+    parser.add_argument('--epochs', type=int, default=2000, metavar='N',
                         help='number of epochs to train (default: 1000)')
     parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
                         help='learning rate (default: 1e-3)')
+    parser.add_argument('--kld_mult', type=float, default=1.0, metavar='F',
+                        help='max kld loss multiplier (default: 1.0)')
+    parser.add_argument('--sup_mult', type=float, default=1e6, metavar='F',
+                        help='max supervised loss multiplier (default: 1e6)')
+    parser.add_argument('--kld_anneal', type=int, default=500, metavar='N',
+                        help='epochs to increase kld_mult over (default: 500)')
+    parser.add_argument('--sup_anneal', type=int, default=1e3, metavar='N',
+                        help='epochs to increase sup_mult over (default: 1e3)')
     parser.add_argument('--eval_freq', type=int, default=10, metavar='N',
                         help='evaluate after this many epochs (default: 10)')
     parser.add_argument('--save_freq', type=int, default=10, metavar='N',
@@ -206,8 +227,8 @@ if __name__ == "__main__":
     )
     train_loader = DataLoader(train_data, batch_size=args.batch_size,
                               shuffle=True, collate_fn=datasets.collate_fn)
-    test_loader = DataLoader(test_data, batch_size=1,
-                             shuffle=False, collate_fn=datasets.collate_fn)
+    test_loader = DataLoader(test_data, batch_size=1, shuffle=False,
+                             collate_fn=datasets.collate_fn)
     print("Done.")
     
     # Create path to save models and predictions
@@ -221,8 +242,6 @@ if __name__ == "__main__":
 
     # Setup optimizer and loss multipliers
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    args.kld_mult = 1.0
-    args.sup_mult = 1e5
     args.rec_mults = (1/model.audio_dim, 1/model.text_dim, 1/model.visual_dim)
         
     # Evaluate model if test flag is set
@@ -238,13 +257,13 @@ if __name__ == "__main__":
         load_checkpoint(model, args.model, args.cuda)
         
     # Train and save best model
-    best_ccc = -2
+    best_ccc = -1
     for epoch in range(1, args.epochs + 1):
         print('---')
         train(train_loader, model, optimizer, epoch, args)
         if epoch % args.eval_freq == 0:
             with torch.no_grad():
-                pred, losses, stats = evaluate(test_loader, model, args)
+                _, _, stats = evaluate(test_loader, model, args)
                 mse, corr, ccc = stats
             if ccc > best_ccc:
                 best_ccc = ccc
