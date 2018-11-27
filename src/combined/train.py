@@ -153,8 +153,10 @@ if __name__ == "__main__":
                         help='number of epochs to train (default: 500)')
     parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
                         help='learning rate (default: 1e-5)')
-    parser.add_argument('--save_freq', type=int, default=5, metavar='N',
-                        help='how many epochs to wait before saving')
+    parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
+                        help='evaluate after this many epochs (default: 1)')
+    parser.add_argument('--save_freq', type=int, default=10, metavar='N',
+                        help='save model after this many epochs (default: 10)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
@@ -223,12 +225,13 @@ if __name__ == "__main__":
     for epoch in range(1, args.epochs + 1):
         print('---')
         train(train_loader, model, criterion, optimizer, epoch, args)
-        with torch.no_grad():
-            pred, loss, corr, ccc =\
-                evaluate(test_loader, model, criterion, args)
-        if ccc > best_ccc:
-            best_ccc = ccc
-            save_checkpoint(model, "./models/best.save")
+        if epoch % args.eval_freq == 0:
+            with torch.no_grad():
+                pred, loss, corr, ccc =\
+                    evaluate(test_loader, model, criterion, args)
+            if ccc > best_ccc:
+                best_ccc = ccc
+                save_checkpoint(model, "./models/best.save")
         if epoch % args.save_freq == 0:
             path = os.path.join("./models",
                                 "epoch_{}.save".format(epoch)) 
