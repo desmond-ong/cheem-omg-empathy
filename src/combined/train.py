@@ -172,6 +172,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
 
+    # Fix random seed
+    torch.manual_seed(1)
+    torch.cuda.manual_seed(1)
+    np.random.seed(1)
+    
     # Load data
     print("Loading data...")
     train_folder = "./data/Training"

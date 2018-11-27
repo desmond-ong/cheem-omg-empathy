@@ -13,7 +13,7 @@ import torch.utils.data
 
 class VRNN(nn.Module):
     def __init__(self, audio_dim=990, text_dim=300, visual_dim=4096,
-                 h_dim=128, z_dim=128, n_layers=1, bias=False, use_cuda=False):
+                 h_dim=256, z_dim=256, n_layers=1, bias=False, use_cuda=False):
         super(VRNN, self).__init__()
 
         self.audio_dim = audio_dim

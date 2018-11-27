@@ -181,12 +181,12 @@ if __name__ == "__main__":
                         help='sections to split each video into (default: 5)')
     parser.add_argument('--epochs', type=int, default=2000, metavar='N',
                         help='number of epochs to train (default: 1000)')
-    parser.add_argument('--lr', type=float, default=1e-3, metavar='LR',
-                        help='learning rate (default: 1e-3)')
+    parser.add_argument('--lr', type=float, default=1e-4, metavar='LR',
+                        help='learning rate (default: 1e-4)')
     parser.add_argument('--kld_mult', type=float, default=1.0, metavar='F',
                         help='max kld loss multiplier (default: 1.0)')
-    parser.add_argument('--sup_mult', type=float, default=1e6, metavar='F',
-                        help='max supervised loss multiplier (default: 1e6)')
+    parser.add_argument('--sup_mult', type=float, default=1e3, metavar='F',
+                        help='max supervised loss multiplier (default: 1e3)')
     parser.add_argument('--kld_anneal', type=int, default=500, metavar='N',
                         help='epochs to increase kld_mult over (default: 500)')
     parser.add_argument('--sup_anneal', type=int, default=1e3, metavar='N',
@@ -208,6 +208,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
 
+    # Fix random seed
+    torch.manual_seed(1)
+    torch.cuda.manual_seed(1)
+    np.random.seed(1)
+    
     # Load data
     print("Loading data...")
     train_folder = "./data/Training"
