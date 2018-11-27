@@ -175,10 +175,10 @@ def load_checkpoint(model, path, use_cuda=False):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=25, metavar='N',
-                        help='input batch size for training (default: 25)')
-    parser.add_argument('--split', type=int, default=5, metavar='N',
-                        help='sections to split each video into (default: 5)')
+    parser.add_argument('--batch_size', type=int, default=50, metavar='N',
+                        help='input batch size for training (default: 50)')
+    parser.add_argument('--split', type=int, default=10, metavar='N',
+                        help='sections to split each video into (default: 10)')
     parser.add_argument('--epochs', type=int, default=2000, metavar='N',
                         help='number of epochs to train (default: 1000)')
     parser.add_argument('--lr', type=float, default=1e-4, metavar='LR',

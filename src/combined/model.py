@@ -10,7 +10,8 @@ class CombinedLSTM(nn.Module):
     """Basic audio-text-visual LSTM model with feature level fusion."""
     
     def __init__(self, audio_size=990, text_size=300, visual_size=4096,
-                 embed_size=128, hidden_size=512, n_layers=1, use_cuda=False):
+                 embed_size=128, hidden_size=512, n_layers=1, attn_len=3,
+                 use_cuda=False):
         super(CombinedLSTM, self).__init__()
         self.audio_size = audio_size
         self.text_size = text_size
@@ -18,6 +19,7 @@ class CombinedLSTM(nn.Module):
         self.embed_size = embed_size
         self.hidden_size = hidden_size
         self.n_layers = n_layers
+        self.attn_len = attn_len
         # Create raw-to-embed FC+Dropout layer for each modality
         self.a_to_embed = nn.Sequential(nn.Dropout(p=0.1),
                                         nn.Linear(audio_size, embed_size),
@@ -28,6 +30,11 @@ class CombinedLSTM(nn.Module):
         self.v_to_embed = nn.Sequential(nn.Dropout(p=0.0),
                                         nn.Linear(visual_size, embed_size),
                                         nn.ReLU())
+        # Layer that computes attention from embeddings
+        self.embed_to_attn = nn.Sequential(nn.Linear(3*embed_size, embed_size),
+                                           nn.ReLU(),
+                                           nn.Linear(embed_size, attn_len),
+                                           nn.Softmax(dim=1))
         # LSTM computes hidden states from embeddings for each modality
         self.lstm = nn.LSTM(3 * embed_size, hidden_size,
                             n_layers, batch_first=True)
@@ -42,7 +49,7 @@ class CombinedLSTM(nn.Module):
 
     def forward(self, audio, text, visual, lengths):
         # Get batch size
-        batch_size, max_seq_length, _ = audio.size()
+        batch_size, seq_length, _ = audio.size()
         # Flatten temporal dimension
         audio = audio.view(-1, self.audio_size)
         text = text.view(-1, self.text_size)
@@ -51,8 +58,11 @@ class CombinedLSTM(nn.Module):
         embed = torch.cat([self.a_to_embed(audio),
                            self.t_to_embed(text),
                            self.v_to_embed(visual)], dim=1)
+        # Compute attention weights
+        attn = self.embed_to_attn(embed)
         # Unflatten temporal dimension
-        embed = embed.reshape(batch_size, max_seq_length, 3*self.embed_size)
+        embed = embed.reshape(batch_size, seq_length, 3*self.embed_size)
+        attn = attn.reshape(batch_size, seq_length, self.attn_len)
         # Pack the input to mask padded entries
         embed = pack_padded_sequence(embed, lengths, batch_first=True)
         # Set initial hidden and cell states
@@ -61,17 +71,32 @@ class CombinedLSTM(nn.Module):
         if self.use_cuda:
             h0, c0 = h0.cuda(), c0.cuda()
         # Forward propagate LSTM
-        out, (h, c) = self.lstm(embed, (h0, c0))
+        h, _ = self.lstm(embed, (h0, c0))
         # Undo the packing
-        out, _ = pad_packed_sequence(out, batch_first=True)
+        h, _ = pad_packed_sequence(h, batch_first=True)
+        # Convolve output with attention weights
+        # i.e. out[t] = a[t,0]*in[t] + ... + a[t,win_len-1]*in[t-(win_len-1)]
+        stacked = torch.stack([self.pad_shift(h, i) for
+                               i in range(self.attn_len)], dim=-1)
+        context = torch.sum(attn.unsqueeze(2) * stacked, dim=-1)
         # Flatten temporal dimension
-        out = out.reshape(-1, self.hidden_size)
-        # Decode the hidden state of each time step
+        out = context.reshape(-1, self.hidden_size)
+        # Decode the context for each time step
         out = self.h_to_out(out)
         # Unflatten temporal dimension
-        out = out.view(batch_size, max_seq_length, 1)
+        out = out.view(batch_size, seq_length, 1)
         return out
 
+    def pad_shift(self, x, shift):
+        """Shift 3D tensor forwards in time with zero padding."""
+        if shift > 0:
+            padding = torch.zeros(x.size(0), shift, x.size(2))
+            if self.use_cuda:
+                padding = padding.cuda()
+            return torch.cat((padding, x[:, :-shift, :]), dim=1)
+        else:
+            return x
+    
 if __name__ == "__main__":
     # Test code by loading dataset and running through model
     import os

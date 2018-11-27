@@ -13,7 +13,7 @@ import torch.utils.data
 
 class VRNN(nn.Module):
     def __init__(self, audio_dim=990, text_dim=300, visual_dim=4096,
-                 h_dim=128, z_dim=128, n_layers=1, bias=False, use_cuda=False):
+                 h_dim=128, z_dim=256, n_layers=1, bias=False, use_cuda=False):
         super(VRNN, self).__init__()
 
         self.audio_dim = audio_dim
@@ -26,11 +26,13 @@ class VRNN(nn.Module):
 
         # Feature-extracting transformations
         self.phi_audio = nn.Sequential(
+            nn.Dropout(p=0.1),
             nn.Linear(audio_dim, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, h_dim),
             nn.ReLU())
         self.phi_text = nn.Sequential(
+            nn.Dropout(p=0.1),
             nn.Linear(text_dim, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, h_dim),
@@ -97,6 +99,7 @@ class VRNN(nn.Module):
 
         # Decoder to predict valence (with skip connections)
         self.dec_val = nn.Sequential(
+            nn.Dropout(p=0.2),
             nn.Linear(3*h_dim + h_dim + h_dim, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, h_dim),
