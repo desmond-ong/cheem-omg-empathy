@@ -85,7 +85,7 @@ def train(loader, model, optimizer, epoch, args):
     # Average losses and print
     loss /= data_num
     print('---')
-    print('Epoch: {}\tLoss: {:10.1f}\tB_KLD: {:0.3f}\tB_Sup: {:7.0f}'.\
+    print('Epoch: {}\tLoss: {:10.1f}\tB_KLD: {:0.3f}\tB_Sup: {:5.2f}'.\
           format(epoch, loss, kld_mult, sup_mult))
     return loss
 
@@ -175,9 +175,9 @@ def load_checkpoint(model, path, use_cuda=False):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=50, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=25, metavar='N',
                         help='input batch size for training (default: 50)')
-    parser.add_argument('--split', type=int, default=10, metavar='N',
+    parser.add_argument('--split', type=int, default=5, metavar='N',
                         help='sections to split each video into (default: 10)')
     parser.add_argument('--epochs', type=int, default=2000, metavar='N',
                         help='number of epochs to train (default: 1000)')
@@ -185,8 +185,8 @@ if __name__ == "__main__":
                         help='learning rate (default: 1e-4)')
     parser.add_argument('--kld_mult', type=float, default=1.0, metavar='F',
                         help='max kld loss multiplier (default: 1.0)')
-    parser.add_argument('--sup_mult', type=float, default=1e3, metavar='F',
-                        help='max supervised loss multiplier (default: 1e3)')
+    parser.add_argument('--sup_mult', type=float, default=100, metavar='F',
+                        help='max supervised loss multiplier (default: 100)')
     parser.add_argument('--kld_anneal', type=int, default=500, metavar='N',
                         help='epochs to increase kld_mult over (default: 500)')
     parser.add_argument('--sup_anneal', type=int, default=1e3, metavar='N',

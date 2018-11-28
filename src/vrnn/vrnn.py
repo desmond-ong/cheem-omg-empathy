@@ -13,7 +13,7 @@ import torch.utils.data
 
 class VRNN(nn.Module):
     def __init__(self, audio_dim=990, text_dim=300, visual_dim=4096,
-                 h_dim=128, z_dim=256, n_layers=1, bias=False, use_cuda=False):
+                 h_dim=128, z_dim=128, n_layers=1, bias=False, use_cuda=False):
         super(VRNN, self).__init__()
 
         self.audio_dim = audio_dim
@@ -97,10 +97,9 @@ class VRNN(nn.Module):
             nn.Softplus())
         self.dec_visual_mean = nn.Linear(h_dim, visual_dim)
 
-        # Decoder to predict valence (with skip connections)
+        # Decoder to predict valence
         self.dec_val = nn.Sequential(
-            nn.Dropout(p=0.2),
-            nn.Linear(3*h_dim + h_dim + h_dim, h_dim),
+            nn.Linear(h_dim + h_dim, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, h_dim),
             nn.ReLU())
@@ -152,8 +151,8 @@ class VRNN(nn.Module):
             prior_mean.append(self.prior_mean(prior_t))
             prior_std.append(self.prior_std(prior_t))
 
-            # Sample and reparameterize
-            z_t = self._sample_gauss(infer_mean[t], infer_std[t])
+            # Sample from prior
+            z_t = self._sample_gauss(prior_mean[t], prior_std[t])
             phi_z_t = self.phi_z(z_t)
 
             # Decode sampled z to reconstruct inputs
@@ -171,14 +170,18 @@ class VRNN(nn.Module):
             visual_mean.append(self.dec_visual_mean(visual_t))
             visual_std.append(self.dec_visual_std(visual_t))
 
-            # Decode z and input features to predict valence
-            val_in_t = torch.cat([phi_all_t, dec_in_t], 1)
-            val_t = self.dec_val(val_in_t)
+            # Decode sampled z to predict valence
+            val_t = self.dec_val(dec_in_t)
             val_mean.append(self.dec_val_mean(val_t))
             val_std.append(self.dec_val_std(val_t))
+
+            # Sample from posterior
+            zq_t = self._sample_gauss(infer_mean[t], infer_std[t])
+            phi_zq_t = self.phi_z(zq_t)
             
             # Recurrence
-            _, h = self.rnn(torch.cat([phi_all_t, phi_z_t], 1).unsqueeze(0), h)
+            rnn_in_t = torch.cat([phi_all_t, phi_zq_t], 1)
+            _, h = self.rnn(rnn_in_t.unsqueeze(0), h)
 
         infer = (torch.stack(infer_mean), torch.stack(infer_std))
         prior = (torch.stack(prior_mean), torch.stack(prior_std))
@@ -226,17 +229,16 @@ class VRNN(nn.Module):
             visual_mean[t] = self.dec_visual_mean(visual_t)
             visual_std_t = self.dec_visual_std(visual_t)
 
+            # Decode sampled z to predict valence
+            val_t = self.dec_val(dec_in_t)
+            val_mean[t] = self.dec_val_mean(val_t)
+            val_std_t = self.dec_val_std(val_t)
+            
             # Extract features from inputs
             phi_audio_t = self.phi_audio(audio_mean[t])
             phi_text_t = self.phi_text(text_mean[t])
             phi_visual_t = self.phi_visual(visual_mean[t])
             phi_all_t = torch.cat([phi_audio_t, phi_text_t, phi_visual_t], 1)
-
-            # Decode z and input features to predict valence
-            val_in_t = torch.cat([phi_all_t, dec_in_t], 1)
-            val_t = self.dec_val(val_in_t)
-            val_mean[t] = self.dec_val_mean(val_t)
-            val_std_t = self.dec_val_std(val_t)
                         
             # Recurrence
             _, h = self.rnn(torch.cat([phi_all_t, phi_z_t], 1).unsqueeze(0), h)
