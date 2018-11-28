@@ -48,13 +48,14 @@ class OMGcombined(Dataset):
     visual_path -- Folder of visual features in NPY format (extra dim=1)
     """
     
-    def __init__(self, audio_path, text_path, visual_path, valence_path,
-                 transform=None, pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
-                 fps=25.0, chunk_dur=1.0, split_ratio=1):
+    def __init__(self, audio_path, text_path, v_sub_path, v_act_path,
+                 val_path, pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
+                 fps=25.0, chunk_dur=1.0, split_ratio=1, truncate=False):
         self.audio_path = audio_path
         self.text_path = text_path
-        self.visual_path = visual_path
-        self.valence_path = valence_path
+        self.v_sub_path = v_sub_path
+        self.v_act_path = v_act_path
+        self.val_path = val_path
         self.pattern = pattern
         self.time_ratio = fps * chunk_dur
         self.split_ratio = split_ratio
@@ -66,23 +67,27 @@ class OMGcombined(Dataset):
         text_files = [os.path.join(text_path, fn) for fn
                       in sorted(os.listdir(self.text_path))
                       if re.match(pattern, fn) is not None]
-        visual_files = [os.path.join(visual_path, fn) for fn
-                        in sorted(os.listdir(self.visual_path))
+        v_sub_files = [os.path.join(v_sub_path, fn) for fn
+                        in sorted(os.listdir(self.v_sub_path))
                         if re.match(pattern, fn) is not None]
-        valence_files = [os.path.join(valence_path, fn) for fn
-                         in sorted(os.listdir(self.valence_path))
+        v_act_files = [os.path.join(v_act_path, fn) for fn
+                        in sorted(os.listdir(self.v_act_path))
+                        if re.match(pattern, fn) is not None]
+        val_files = [os.path.join(val_path, fn) for fn
+                         in sorted(os.listdir(self.val_path))
                          if re.match(pattern, fn) is not None]
 
         # Check that number of files are equal
         if not (len(audio_files) == len(text_files) and
-                len(text_files) == len(visual_files) and
-                len(visual_files) == len(valence_files)):
+                len(text_files) == len(v_sub_files) and
+                len(v_sub_files) == len(v_act_files) and
+                len(v_act_files) == len(val_files)):
             raise Exception("Number of files do not match.")
 
         # Store subject and story IDs
         self.subjects = []
         self.stories = []
-        for fn in sorted(os.listdir(self.valence_path)):
+        for fn in sorted(os.listdir(self.val_path)):
             match = re.match(pattern, fn)
             if match:
                 self.subjects.append(match.group(1))
@@ -91,41 +96,54 @@ class OMGcombined(Dataset):
         # Load data for each video
         self.audio_data = []
         self.text_data = []
-        self.visual_data = []
-        self.valence_data = []
-        self.valence_orig = []
-        for f_au, f_te, f_vi, f_va in zip(audio_files, text_files,
-                                          visual_files, valence_files):
+        self.v_sub_data = []
+        self.v_act_data = []
+        self.val_data = []
+        self.val_orig = []
+        for f_au, f_te, f_vs, f_va, f_vl in \
+            zip(audio_files, text_files, v_sub_files, v_act_files, val_files):
             # Load each input modality
             audio = np.array(pd.read_csv(f_au))
             text = np.load(f_te)
-            visual = np.load(f_vi).squeeze(1)
+            v_sub = np.load(f_vs).squeeze(1)
+            v_act = np.load(f_va).squeeze(1)
             # Load and store original valence ratings
-            valence = pd.read_csv(f_va)
-            self.valence_orig.append(np.array(valence).flatten())
+            val = pd.read_csv(f_vl)
+            self.val_orig.append(np.array(val).flatten())
             # Average valence across time chunks
-            group_idx = np.arange(len(valence)) // self.time_ratio
-            valence = np.array(valence.groupby(group_idx).mean())
+            group_idx = np.arange(len(val)) // self.time_ratio
+            val = np.array(val.groupby(group_idx).mean())
+            # Truncate to minimum sequence length
+            if truncate:
+                seq_len =\
+                    min([len(d) for d in [audio, text, v_sub, v_act, val]])
+                audio = audio[:seq_len]
+                text = text[:seq_len]
+                v_sub = v_sub[:seq_len]
+                v_act = v_act[:seq_len]
+                val = val[:seq_len]
             # Split data to create more examples
             if split_ratio > 1:
                 audio = np.array_split(audio, split_ratio, axis=0)
                 text = np.array_split(text, split_ratio, axis=0)
-                visual = np.array_split(visual, split_ratio, axis=0)
-                valence = np.array_split(valence, split_ratio, axis=0)
+                v_sub = np.array_split(v_sub, split_ratio, axis=0)
+                v_act = np.array_split(v_act, split_ratio, axis=0)
+                val = np.array_split(val, split_ratio, axis=0)
             else:
-                audio, text, visual, valence =\
-                    [audio], [text], [visual], [valence]
+                audio, text, v_sub, v_act, val =\
+                    [audio], [text], [v_sub], [v_act], [val]
             self.audio_data += audio
             self.text_data += text
-            self.visual_data += visual
-            self.valence_data += valence
+            self.v_sub_data += v_sub
+            self.v_act_data += v_act
+            self.val_data += val
 
     def __len__(self):
-        return len(self.valence_data)
+        return len(self.val_data)
 
     def __getitem__(self, i):
         return (self.audio_data[i], self.text_data[i],
-                self.visual_data[i], self.valence_data[i])
+                self.v_sub_data[i], self.v_act_data[i], self.val_data[i])
     
 if __name__ == "__main__":
     # Test code by loading dataset
@@ -137,11 +155,13 @@ if __name__ == "__main__":
 
     audio_path = os.path.join(args.folder, "CombinedAudio")
     text_path = os.path.join(args.folder, "CombinedText")
-    visual_path = os.path.join(args.folder, "CombinedVisual")
-    valence_path = os.path.join(args.folder, "Annotations")
+    v_sub_path = os.path.join(args.folder, "CombinedVSub")
+    v_act_path = os.path.join(args.folder, "CombinedVAct")
+    val_path = os.path.join(args.folder, "Annotations")
 
     print("Loading data...")
-    dataset = OMGcombined(audio_path, text_path, visual_path, valence_path)
+    dataset = OMGcombined(audio_path, text_path,
+                          v_sub_path, v_act_path, val_path)
     print("Testing batch collation...")
     data = collate_fn([dataset[i] for i in range(min(10, len(dataset)))])
     print("Batch shapes:")
@@ -150,11 +170,12 @@ if __name__ == "__main__":
     print("Sequence lengths: ", data[-1])
     print("Checking through data for mismatched sequence lengths...")
     for i, data in enumerate(dataset):
-        audio, text, visual, valence = data
+        audio, text, v_sub, v_act, val = data
         print("#{}\tSubject: {}\tStory: {}:".\
               format(i+1, dataset.subjects[i], dataset.stories[i]))
-        print(audio.shape, text.shape, visual.shape, valence.shape)
+        print(audio.shape, text.shape, v_sub.shape, v_act.shape, val.shape)
         if not (len(audio) == len(text) and
-                len(text) == len(visual) and
-                len(visual) == len(valence)):
+                len(text) == len(v_sub) and
+                len(v_sub) == len(v_act) and
+                len(v_act) == len(val)):
             print("WARNING: Mismatched sequence lengths.")

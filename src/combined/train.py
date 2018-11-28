@@ -45,13 +45,14 @@ def train(loader, model, criterion, optimizer, epoch, args):
             for i in range(len(batch)-1):
                 batch[i] = batch[i].cuda()
         # Unpack batch
-        audio, text, visual, target, lengths = batch
+        audio, text, v_sub, v_act, target, lengths = batch
+        inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
         # Compute differences for target
         if args.diff:
             target = target[:,1:] - target[:,:-1]
             target = torch.cat([torch.zeros(batch_size, 1, 1), target], dim=1)
         # Run forward pass.
-        output = model(audio, text, visual, lengths)
+        output = model(inputs, lengths)
         # Compute loss and gradients
         batch_loss = criterion(output, target)
         loss += batch_loss
@@ -88,9 +89,10 @@ def evaluate(loader, model, criterion, args):
             for i in range(len(batch)-1):
                 batch[i] = batch[i].cuda()
         # Unpack batch
-        audio, text, visual, target, lengths = batch
+        audio, text, v_sub, v_act, target, lengths = batch
+        inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
         # Run forward pass.
-        output = model(audio, text, visual, lengths)
+        output = model(inputs, lengths)
         # Compute loss and gradients
         if args.diff:
             batch_loss = criterion(output, diff)
@@ -109,7 +111,7 @@ def evaluate(loader, model, criterion, args):
             pred.append(pred_i)
     # Compute CCC of predictions with original unsmoothed data
     time_ratio = loader.dataset.time_ratio
-    true = loader.dataset.valence_orig
+    true = loader.dataset.val_orig
     for i in range(len(pred)):
         # Repeat and pad predictions to match original data length
         pred[i] = np.repeat(pred[i], time_ratio)[:len(true[i])]
@@ -183,15 +185,17 @@ if __name__ == "__main__":
     train_data = datasets.OMGcombined(
         os.path.join(train_folder,"CombinedAudio"),
         os.path.join(train_folder,"CombinedText"),
-        os.path.join(train_folder,"CombinedVisual"),
+        os.path.join(train_folder,"CombinedVSub"),
+        os.path.join(train_folder,"CombinedVAct"),
         os.path.join(train_folder,"Annotations"),
-        split_ratio=args.split
+        split_ratio=args.split, truncate=True
     )
     test_folder = args.test_path
     test_data = datasets.OMGcombined(
         os.path.join(test_folder,"CombinedAudio"),
         os.path.join(test_folder,"CombinedText"),
-        os.path.join(test_folder,"CombinedVisual"),
+        os.path.join(test_folder,"CombinedVSub"),
+        os.path.join(test_folder,"CombinedVAct"),
         os.path.join(test_folder,"Annotations")
     )
     train_loader = DataLoader(train_data, batch_size=args.batch_size,

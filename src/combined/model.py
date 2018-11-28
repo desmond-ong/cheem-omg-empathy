@@ -9,65 +9,61 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 class CombinedLSTM(nn.Module):
     """Basic audio-text-visual LSTM model with feature level fusion."""
     
-    def __init__(self, audio_size=990, text_size=300, visual_size=4096,
-                 embed_size=128, hidden_size=512, n_layers=1, attn_len=3,
-                 use_cuda=False):
+    def __init__(self, mods=('audio', 'text', 'v_sub', 'v_act'),
+                 dims=(990, 300, 4096, 4096), embed_dim=128,
+                 hidden_dim=512, n_layers=1, attn_len=5, use_cuda=False):
         super(CombinedLSTM, self).__init__()
-        self.audio_size = audio_size
-        self.text_size = text_size
-        self.visual_size = visual_size
-        self.embed_size = embed_size
-        self.hidden_size = hidden_size
+        self.mods = mods
+        self.n_mods = len(mods)
+        self.dims = dict(zip(mods, dims))
+        self.embed_dim = embed_dim
+        self.hidden_dim = hidden_dim
         self.n_layers = n_layers
         self.attn_len = attn_len
+        
         # Create raw-to-embed FC+Dropout layer for each modality
-        self.a_to_embed = nn.Sequential(nn.Dropout(p=0.1),
-                                        nn.Linear(audio_size, embed_size),
-                                        nn.ReLU())
-        self.t_to_embed = nn.Sequential(nn.Dropout(p=0.1),
-                                        nn.Linear(text_size, embed_size),
-                                        nn.ReLU())
-        self.v_to_embed = nn.Sequential(nn.Dropout(p=0.0),
-                                        nn.Linear(visual_size, embed_size),
-                                        nn.ReLU())
+        self.embed = dict()
+        dropouts = {'audio': 0.1, 'text': 0.1, 'v_sub': 0.0, 'v_act': 0.0}
+        for m in self.mods:
+            self.embed[m] = nn.Sequential(nn.Dropout(p=dropouts[m]),
+                                          nn.Linear(self.dims[m], embed_dim),
+                                          nn.ReLU())
+            self.add_module('embed_{}'.format(m), self.embed[m])
         # Layer that computes attention from embeddings
-        self.embed_to_attn = nn.Sequential(nn.Linear(3*embed_size, embed_size),
-                                           nn.ReLU(),
-                                           nn.Linear(embed_size, attn_len),
-                                           nn.Softmax(dim=1))
+        self.attn = nn.Sequential(nn.Linear(len(mods)*embed_dim, embed_dim),
+                                  nn.ReLU(),
+                                  nn.Linear(embed_dim, attn_len),
+                                  nn.Softmax(dim=1))
         # LSTM computes hidden states from embeddings for each modality
-        self.lstm = nn.LSTM(3 * embed_size, hidden_size,
+        self.lstm = nn.LSTM(len(mods) * embed_dim, hidden_dim,
                             n_layers, batch_first=True)
         # Regression network from LSTM hidden states to predicted valence
-        self.h_to_out = nn.Sequential(nn.Linear(hidden_size, embed_size),
+        self.h_to_out = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
                                       nn.ReLU(),
-                                      nn.Linear(embed_size, 1))
+                                      nn.Linear(embed_dim, 1))
         # Enable CUDA if flag is set
         self.use_cuda = use_cuda
         if self.use_cuda:
             self.cuda()
 
-    def forward(self, audio, text, visual, lengths):
-        # Get batch size
-        batch_size, seq_length, _ = audio.size()
+    def forward(self, inputs, lengths):
+        # Get batch dim
+        batch_size, seq_len = len(lengths), max(lengths)
         # Flatten temporal dimension
-        audio = audio.view(-1, self.audio_size)
-        text = text.view(-1, self.text_size)
-        visual = visual.view(-1, self.visual_size)
+        for m in self.mods:
+            inputs[m] = inputs[m].view(-1, self.dims[m])
         # Convert raw features into equal-dimensional embeddings
-        embed = torch.cat([self.a_to_embed(audio),
-                           self.t_to_embed(text),
-                           self.v_to_embed(visual)], dim=1)
+        embed = torch.cat([self.embed[m](inputs[m]) for m in self.mods], 1)
         # Compute attention weights
-        attn = self.embed_to_attn(embed)
+        attn = self.attn(embed)
         # Unflatten temporal dimension
-        embed = embed.reshape(batch_size, seq_length, 3*self.embed_size)
-        attn = attn.reshape(batch_size, seq_length, self.attn_len)
+        embed = embed.reshape(batch_size, seq_len, self.n_mods*self.embed_dim)
+        attn = attn.reshape(batch_size, seq_len, self.attn_len)
         # Pack the input to mask padded entries
         embed = pack_padded_sequence(embed, lengths, batch_first=True)
         # Set initial hidden and cell states
-        h0 = torch.zeros(self.n_layers, batch_size, self.hidden_size)
-        c0 = torch.zeros(self.n_layers, batch_size, self.hidden_size)
+        h0 = torch.zeros(self.n_layers, batch_size, self.hidden_dim)
+        c0 = torch.zeros(self.n_layers, batch_size, self.hidden_dim)
         if self.use_cuda:
             h0, c0 = h0.cuda(), c0.cuda()
         # Forward propagate LSTM
@@ -80,11 +76,11 @@ class CombinedLSTM(nn.Module):
                                i in range(self.attn_len)], dim=-1)
         context = torch.sum(attn.unsqueeze(2) * stacked, dim=-1)
         # Flatten temporal dimension
-        out = context.reshape(-1, self.hidden_size)
+        out = context.reshape(-1, self.hidden_dim)
         # Decode the context for each time step
         out = self.h_to_out(out)
         # Unflatten temporal dimension
-        out = out.view(batch_size, seq_length, 1)
+        out = out.view(batch_size, seq_len, 1)
         return out
 
     def pad_shift(self, x, shift):
@@ -105,21 +101,24 @@ if __name__ == "__main__":
     base_folder = "./data/Training"
     audio_path = os.path.join(base_folder, "CombinedAudio")
     text_path = os.path.join(base_folder, "CombinedText")
-    visual_path = os.path.join(base_folder, "CombinedVisual")
+    v_sub_path = os.path.join(base_folder, "CombinedVSub")
+    v_act_path = os.path.join(base_folder, "CombinedVAct")
     valence_path = os.path.join(base_folder, "Annotations")
 
     print("Loading data...")
-    dataset = OMGcombined(audio_path, text_path, visual_path, valence_path)
+    dataset = OMGcombined(audio_path, text_path,
+                          v_sub_path, v_act_path, valence_path,
+                          truncate=True)
     print("Building model...")
     model = CombinedLSTM()
     model.eval()
     print("Passing a sample through the model...")
-    audio, text, visual, valence = dataset[0]
+    audio, text, v_sub, v_act, valence = dataset[0]
     lengths = [audio.shape[0]]
-    audio = torch.tensor(audio).unsqueeze(0).float()
-    text = torch.tensor(text).unsqueeze(0).float()
-    visual = torch.tensor(visual).unsqueeze(0).float()
-    out = model(audio, text, visual, lengths).view(-1)
+    inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
+    for m in inputs.keys():
+        inputs[m] = torch.tensor(inputs[m]).unsqueeze(0).float()
+    out = model(inputs, lengths).view(-1)
     print("Predicted valences:")
     for o in out:
         print("{:+0.3f}".format(o.item()))
