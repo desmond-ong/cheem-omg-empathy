@@ -147,6 +147,8 @@ def load_checkpoint(model, path, use_cuda=False):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument('--inputs', type=str, default="audio,text,v_sub,v_act",
+                        help='comma-separated input modalities (default: all)')
     parser.add_argument('--batch_size', type=int, default=25, metavar='N',
                         help='input batch size for training (default: 25)')
     parser.add_argument('--split', type=int, default=5, metavar='N',
@@ -213,7 +215,11 @@ if __name__ == "__main__":
         os.makedirs('./predictions')
     
     # Construct audio-text-visual LSTM model
-    model = CombinedLSTM(use_cuda=args.cuda)
+    dims = {'audio': 990, 'text': 300, 'v_sub': 4096, 'v_act': 4096}
+    modalities = tuple(args.inputs.split(','))
+    model = CombinedLSTM(mods=modalities,
+                         dims=(dims[m] for m in modalities),
+                         use_cuda=args.cuda)
 
     # Setup loss and optimizer
     criterion = nn.MSELoss(reduction='sum')

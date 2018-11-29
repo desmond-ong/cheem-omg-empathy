@@ -23,7 +23,7 @@ class CombinedLSTM(nn.Module):
         
         # Create raw-to-embed FC+Dropout layer for each modality
         self.embed = dict()
-        dropouts = {'audio': 0.1, 'text': 0.1, 'v_sub': 0.5, 'v_act': 0.0}
+        dropouts = {'audio': 0.1, 'text': 0.1, 'v_sub': 0.2, 'v_act': 0.2}
         for m in self.mods:
             self.embed[m] = nn.Sequential(nn.Dropout(p=dropouts[m]),
                                           nn.Linear(self.dims[m], embed_dim),
