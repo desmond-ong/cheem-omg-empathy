@@ -11,7 +11,7 @@ class CombinedLSTM(nn.Module):
     
     def __init__(self, mods=('audio', 'text', 'v_sub', 'v_act'),
                  dims=(990, 300, 4096, 4096), embed_dim=128,
-                 hidden_dim=512, n_layers=1, attn_len=5, use_cuda=False):
+                 hidden_dim=512, n_layers=1, attn_len=3, use_cuda=False):
         super(CombinedLSTM, self).__init__()
         self.mods = mods
         self.n_mods = len(mods)
@@ -23,7 +23,7 @@ class CombinedLSTM(nn.Module):
         
         # Create raw-to-embed FC+Dropout layer for each modality
         self.embed = dict()
-        dropouts = {'audio': 0.1, 'text': 0.1, 'v_sub': 0.0, 'v_act': 0.0}
+        dropouts = {'audio': 0.1, 'text': 0.1, 'v_sub': 0.5, 'v_act': 0.0}
         for m in self.mods:
             self.embed[m] = nn.Sequential(nn.Dropout(p=dropouts[m]),
                                           nn.Linear(self.dims[m], embed_dim),

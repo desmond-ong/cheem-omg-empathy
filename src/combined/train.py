@@ -167,10 +167,12 @@ if __name__ == "__main__":
                         help='resume training loaded model (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
                         help='evaluate without training (default: false)')
-    parser.add_argument('--test_path', type=str, default="./data/Validation",
+    parser.add_argument('--load', type=str, default=None,
+                        help='path to load trained model')
+    parser.add_argument('--test_dir', type=str, default="./data/Validation",
                         help='path to test data (default: ./data/Validation)')
-    parser.add_argument('--model', type=str, default="./models/best.save",
-                        help='path to trained model')
+    parser.add_argument('--model_dir', type=str, default="./models",
+                        help='path to save models')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
 
@@ -190,7 +192,7 @@ if __name__ == "__main__":
         os.path.join(train_folder,"Annotations"),
         split_ratio=args.split, truncate=True
     )
-    test_folder = args.test_path
+    test_folder = args.test_dir
     test_data = datasets.OMGcombined(
         os.path.join(test_folder,"CombinedAudio"),
         os.path.join(test_folder,"CombinedText"),
@@ -205,8 +207,8 @@ if __name__ == "__main__":
     print("Done.")
     
     # Create path to save models and predictions
-    if not os.path.exists('./models'):
-        os.makedirs('./models')
+    if not os.path.exists(args.model_dir):
+        os.makedirs(args.model_dir)
     if not os.path.exists('./predictions'):
         os.makedirs('./predictions')
     
@@ -216,10 +218,16 @@ if __name__ == "__main__":
     # Setup loss and optimizer
     criterion = nn.MSELoss(reduction='sum')
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
-        
+
+    # Load best model by default
+    if args.load is None:
+        model_path = os.path.join(args.model_dir, "best.save")
+    else:
+        model_path = args.load
+    
     # Evaluate model if test flag is set
     if args.test:
-        load_checkpoint(model, args.model, args.cuda)
+        load_checkpoint(model, model_path, args.cuda)
         with torch.no_grad():
             pred, _, _, _ = evaluate(test_loader, model, criterion, args)
         save_predictions(pred, test_data)
@@ -227,7 +235,7 @@ if __name__ == "__main__":
 
     # Load model if continue flag is set
     if args.resume:
-        load_checkpoint(model, args.model, args.cuda)
+        load_checkpoint(model, model_path, args.cuda)
         
     # Train and save best model
     best_ccc = -2
@@ -240,8 +248,9 @@ if __name__ == "__main__":
                     evaluate(test_loader, model, criterion, args)
             if ccc > best_ccc:
                 best_ccc = ccc
-                save_checkpoint(model, "./models/best.save")
+                path = os.path.join(args.model_dir, "best.save") 
+                save_checkpoint(model, path)
         if epoch % args.save_freq == 0:
-            path = os.path.join("./models",
+            path = os.path.join(args.model_dir,
                                 "epoch_{}.save".format(epoch)) 
             save_checkpoint(model, path)
