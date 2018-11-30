@@ -90,6 +90,12 @@ class CombinedLSTM(nn.Module):
             if self.use_cuda:
                 padding = padding.cuda()
             return torch.cat((padding, x[:, :-shift, :]), dim=1)
+        elif shift < 0:
+            padding = torch.zeros(x.size(0), -shift, x.size(2))
+            if self.use_cuda:
+                padding = padding.cuda()
+            pad = torch.cat((x[:, -shift:, :], padding), dim=1)
+            return pad
         else:
             return x
     
