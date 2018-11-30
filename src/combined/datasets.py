@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import os
 import re
+import itertools
 import pandas as pd
 import numpy as np
 import torch
@@ -45,36 +46,38 @@ class OMGcombined(Dataset):
     
     audio_path -- Folder of OpenSMILE features in CSV format
     text_path -- Folder of text features in NPY format
-    visual_path -- Folder of visual features in NPY format (extra dim=1)
+    v_sub_path -- Folder of subject visual features in NPY format
+    v_act_path -- Folder of actor visual features in NPY format
+    val_path -- Folder of valence annotations in CSV format
     """
     
-    def __init__(self, audio_path, text_path, v_sub_path, v_act_path,
-                 val_path, pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
-                 fps=25.0, chunk_dur=1.0, split_ratio=1, truncate=False):
-        self.audio_path = audio_path
-        self.text_path = text_path
-        self.v_sub_path = v_sub_path
-        self.v_act_path = v_act_path
-        self.val_path = val_path
-        self.pattern = pattern
+    def __init__(self, audio_path=None, text_path=None,
+                 v_sub_path=None, v_act_path=None, val_path=None,
+                 pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
+                 fps=25.0, chunk_dur=1.0, split_ratio=1, truncate=False,
+                 dataset=None):
+        # Copy construct if dataset is provided
+        if dataset is not None:
+            self.copy(dataset)
+            return
+        
         self.time_ratio = fps * chunk_dur
-        self.split_ratio = split_ratio
 
         # Load files into list
         audio_files = [os.path.join(audio_path, fn) for fn
-                       in sorted(os.listdir(self.audio_path))
+                       in sorted(os.listdir(audio_path))
                        if re.match(pattern, fn) is not None]
         text_files = [os.path.join(text_path, fn) for fn
-                      in sorted(os.listdir(self.text_path))
+                      in sorted(os.listdir(text_path))
                       if re.match(pattern, fn) is not None]
         v_sub_files = [os.path.join(v_sub_path, fn) for fn
-                        in sorted(os.listdir(self.v_sub_path))
+                        in sorted(os.listdir(v_sub_path))
                         if re.match(pattern, fn) is not None]
         v_act_files = [os.path.join(v_act_path, fn) for fn
-                        in sorted(os.listdir(self.v_act_path))
+                        in sorted(os.listdir(v_act_path))
                         if re.match(pattern, fn) is not None]
         val_files = [os.path.join(val_path, fn) for fn
-                         in sorted(os.listdir(self.val_path))
+                         in sorted(os.listdir(val_path))
                          if re.match(pattern, fn) is not None]
 
         # Check that number of files are equal
@@ -87,7 +90,7 @@ class OMGcombined(Dataset):
         # Store subject and story IDs
         self.subjects = []
         self.stories = []
-        for fn in sorted(os.listdir(self.val_path)):
+        for fn in sorted(os.listdir(val_path)):
             match = re.match(pattern, fn)
             if match:
                 self.subjects.append(match.group(1))
@@ -122,28 +125,98 @@ class OMGcombined(Dataset):
                 v_sub = v_sub[:seq_len]
                 v_act = v_act[:seq_len]
                 val = val[:seq_len]
-            # Split data to create more examples
-            if split_ratio > 1:
-                audio = np.array_split(audio, split_ratio, axis=0)
-                text = np.array_split(text, split_ratio, axis=0)
-                v_sub = np.array_split(v_sub, split_ratio, axis=0)
-                v_act = np.array_split(v_act, split_ratio, axis=0)
-                val = np.array_split(val, split_ratio, axis=0)
-            else:
-                audio, text, v_sub, v_act, val =\
-                    [audio], [text], [v_sub], [v_act], [val]
-            self.audio_data += audio
-            self.text_data += text
-            self.v_sub_data += v_sub
-            self.v_act_data += v_act
-            self.val_data += val
+            # Append data
+            self.audio_data.append(audio)
+            self.text_data.append(text)
+            self.v_sub_data.append(v_sub)
+            self.v_act_data.append(v_act)
+            self.val_data.append(val)
 
+        # Split data to create more examples
+        self.split(split_ratio)
+            
     def __len__(self):
-        return len(self.val_data)
+        return len(self.val_split)
 
     def __getitem__(self, i):
-        return (self.audio_data[i], self.text_data[i],
-                self.v_sub_data[i], self.v_act_data[i], self.val_data[i])
+        return (self.audio_split[i], self.text_split[i],
+                self.v_sub_split[i], self.v_act_split[i], self.val_split[i])
+
+    def split(self, n):
+        """Splits each sequence into n chunks."""
+        self.split_ratio = n
+        self.audio_split = list(itertools.chain.from_iterable(
+            [np.array_split(a, n, 0) for a in self.audio_data]))
+        self.text_split = list(itertools.chain.from_iterable(
+            [np.array_split(a, n, 0) for a in self.text_data]))
+        self.v_sub_split = list(itertools.chain.from_iterable(
+            [np.array_split(a, n, 0) for a in self.v_sub_data]))
+        self.v_act_split = list(itertools.chain.from_iterable(
+            [np.array_split(a, n, 0) for a in self.v_act_data]))
+        self.val_split = list(itertools.chain.from_iterable(
+            [np.array_split(a, n, 0) for a in self.val_data]))
+    
+    def copy(self, other):
+        """Copy constructor"""
+        self.stories = list(other.stories)
+        self.subjects = list(other.subjects)
+
+        self.audio_data = list(other.audio_data)
+        self.text_data = list(other.text_data)
+        self.v_sub_data = list(other.v_sub_data)
+        self.v_act_data = list(other.v_act_data)
+
+        self.val_data = list(other.val_data)
+        self.val_orig = list(other.val_orig)
+
+        self.time_ratio = other.time_ratio
+        self.split(other.split_ratio)
+    
+    def join(self, other):
+        """Join with another dataset."""
+        if (self.time_ratio != other.time_ratio or
+            self.split_ratio != other.split_ratio):
+            raise Exception("Time and split ratios need to match.")
+        joined = self.__class__(dataset=self)
+        joined.stories += other.stories
+        joined.subjects += other.subjects
+        joined.audio_data += other.audio_data
+        joined.text_data += other.text_data
+        joined.v_sub_data += other.v_sub_data
+        joined.v_act_data += other.v_act_data
+        joined.val_data += other.val_data
+        joined.val_orig += other.val_orig
+        joined.split(self.split_ratio)
+        return joined
+
+    def extract_story(self, s):
+        """Extract specified story ids to form new train-test split."""
+        extract = self.__class__(dataset=self)
+        remain = self.__class__(dataset=self)
+        # Find indices of specified story
+        idx = [i for i, story in enumerate(self.stories) if story in s]
+        # Extract data for specified story
+        extract.stories = [self.stories[i] for i in idx]
+        extract.subjects = [self.subjects[i] for i in idx]
+        extract.audio_data = [self.audio_data[i] for i in idx]
+        extract.text_data = [self.text_data[i] for i in idx]
+        extract.v_sub_data = [self.v_sub_data[i] for i in idx]
+        extract.v_act_data = [self.v_act_data[i] for i in idx]
+        extract.val_data = [self.val_data[i] for i in idx]
+        extract.val_orig = [self.val_orig[i] for i in idx]
+        # Delete extracted data from remainder
+        for i in sorted(idx, reverse=True):
+            del remain.stories[i]
+            del remain.subjects[i]
+            del remain.audio_data[i]
+            del remain.text_data[i]
+            del remain.v_sub_data[i]
+            del remain.v_act_data[i]
+            del remain.val_data[i]
+            del remain.val_orig[i]
+        extract.split(self.split_ratio)
+        remain.split(self.split_ratio)
+        return extract, remain
     
 if __name__ == "__main__":
     # Test code by loading dataset

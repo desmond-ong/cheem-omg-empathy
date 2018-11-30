@@ -144,40 +144,7 @@ def load_checkpoint(model, path, use_cuda=False):
         checkpoint = torch.load(path, map_location=lambda s, l: s)
     model.load_state_dict(checkpoint)
     
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--inputs', type=str, default="audio,text,v_sub,v_act",
-                        help='comma-separated input modalities (default: all)')
-    parser.add_argument('--batch_size', type=int, default=25, metavar='N',
-                        help='input batch size for training (default: 25)')
-    parser.add_argument('--split', type=int, default=5, metavar='N',
-                        help='sections to split each video into (default: 5)')
-    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
-                        help='number of epochs to train (default: 1000)')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
-                        help='learning rate (default: 1e-5)')
-    parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
-                        help='evaluate after this many epochs (default: 1)')
-    parser.add_argument('--save_freq', type=int, default=10, metavar='N',
-                        help='save model after this many epochs (default: 10)')
-    parser.add_argument('--cuda', action='store_true', default=False,
-                        help='enables CUDA training (default: false)')
-    parser.add_argument('--diff', action='store_true', default=False,
-                        help='whether to predict differences (default: false)')
-    parser.add_argument('--resume', action='store_true', default=False,
-                        help='resume training loaded model (default: false)')
-    parser.add_argument('--test', action='store_true', default=False,
-                        help='evaluate without training (default: false)')
-    parser.add_argument('--load', type=str, default=None,
-                        help='path to load trained model')
-    parser.add_argument('--test_dir', type=str, default="./data/Validation",
-                        help='path to test data (default: ./data/Validation)')
-    parser.add_argument('--model_dir', type=str, default="./models",
-                        help='path to save models')
-    args = parser.parse_args()
-    args.cuda = args.cuda and torch.cuda.is_available()
-
+def main(args):
     # Fix random seed
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
@@ -192,7 +159,7 @@ if __name__ == "__main__":
         os.path.join(train_folder,"CombinedVSub"),
         os.path.join(train_folder,"CombinedVAct"),
         os.path.join(train_folder,"Annotations"),
-        split_ratio=args.split, truncate=True
+        truncate=True
     )
     test_folder = args.test_dir
     test_data = datasets.OMGcombined(
@@ -202,6 +169,14 @@ if __name__ == "__main__":
         os.path.join(test_folder,"CombinedVAct"),
         os.path.join(test_folder,"Annotations")
     )
+    all_data = train_data.join(test_data)
+
+    # Make new train/test split if test_story is specified
+    if args.test_story is not None:
+        test_data, train_data = all_data.extract_story(args.test_story)
+    train_data.split(args.split) # Split training data into chunks
+
+    # Batch data using data loaders
     train_loader = DataLoader(train_data, batch_size=args.batch_size,
                               shuffle=True, collate_fn=datasets.collate_fn)
     test_loader = DataLoader(test_data, batch_size=1,
@@ -260,3 +235,40 @@ if __name__ == "__main__":
             path = os.path.join(args.model_dir,
                                 "epoch_{}.save".format(epoch)) 
             save_checkpoint(model, path)
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--inputs', type=str, default="audio,text,v_sub,v_act",
+                        help='comma-separated input modalities (default: all)')
+    parser.add_argument('--batch_size', type=int, default=25, metavar='N',
+                        help='input batch size for training (default: 25)')
+    parser.add_argument('--split', type=int, default=5, metavar='N',
+                        help='sections to split each video into (default: 5)')
+    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
+                        help='number of epochs to train (default: 1000)')
+    parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
+                        help='learning rate (default: 1e-5)')
+    parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
+                        help='evaluate after this many epochs (default: 1)')
+    parser.add_argument('--save_freq', type=int, default=10, metavar='N',
+                        help='save model after this many epochs (default: 10)')
+    parser.add_argument('--cuda', action='store_true', default=False,
+                        help='enables CUDA training (default: false)')
+    parser.add_argument('--diff', action='store_true', default=False,
+                        help='whether to predict differences (default: false)')
+    parser.add_argument('--resume', action='store_true', default=False,
+                        help='resume training loaded model (default: false)')
+    parser.add_argument('--test', action='store_true', default=False,
+                        help='evaluate without training (default: false)')
+    parser.add_argument('--test_story', type=int, default=None,
+                        help='story to use as test set (optional)')
+    parser.add_argument('--load', type=str, default=None,
+                        help='path to load trained model')
+    parser.add_argument('--test_dir', type=str, default="./data/Validation",
+                        help='path to test data (default: ./data/Validation)')
+    parser.add_argument('--model_dir', type=str, default="./models",
+                        help='path to save models')
+    args = parser.parse_args()
+    args.cuda = args.cuda and torch.cuda.is_available()
+    main(args)
