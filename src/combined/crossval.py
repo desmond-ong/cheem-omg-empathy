@@ -3,6 +3,7 @@
 import os
 import csv
 import train
+import torch
 
 def main(args):
     # Set constant flags to be passed on to train.main
@@ -23,11 +24,11 @@ def main(args):
         
         # Train and compute best CCC on test set
         args.test = False
-        test_ccc[story] = main(train_data, test_data, args)
+        test_ccc[story] = train.main(train_data, test_data, args)
 
         # Test model on training set
         args.test = True
-        train_ccc[story] = main(train_data, train_data, args)
+        train_ccc[story] = train.main(train_data, train_data, args)
 
     # Print and save results
     results_path = os.join(model_dir, "crossval.csv")
@@ -39,8 +40,8 @@ def main(args):
     for story in train_ccc.keys():
         print("{:i}\t{:0.3f}\t{0.3f}".\
               format(story, train_ccc[story], test_ccc[story]))
-        writer.writerow([story, train_ccc[story], test_ccc[story])
-    reults_f.close()
+        writer.writerow([story, train_ccc[story], test_ccc[story]])
+    results_f.close()
         
 if __name__ == "__main__":
     import argparse
