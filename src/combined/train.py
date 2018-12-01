@@ -143,39 +143,35 @@ def load_checkpoint(model, path, use_cuda=False):
     else:
         checkpoint = torch.load(path, map_location=lambda s, l: s)
     model.load_state_dict(checkpoint)
+
+def load_data(train_dir, test_dir):
+    print("Loading data...")
+    train_data = datasets.OMGcombined(
+        os.path.join(train_dir,"CombinedAudio"),
+        os.path.join(train_dir,"CombinedText"),
+        os.path.join(train_dir,"CombinedVSub"),
+        os.path.join(train_dir,"CombinedVAct"),
+        os.path.join(train_dir,"Annotations"),
+        truncate=True
+    )
+    test_data = datasets.OMGcombined(
+        os.path.join(test_dir,"CombinedAudio"),
+        os.path.join(test_dir,"CombinedText"),
+        os.path.join(test_dir,"CombinedVSub"),
+        os.path.join(test_dir,"CombinedVAct"),
+        os.path.join(test_dir,"Annotations")
+    )
+    all_data = train_data.join(test_data)
+    return train_data, test_data, all_data
     
-def main(args):
+def main(train_data, test_data, args):
     # Fix random seed
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
     np.random.seed(1)
-    
-    # Load data
-    print("Loading data...")
-    train_folder = "./data/Training"
-    train_data = datasets.OMGcombined(
-        os.path.join(train_folder,"CombinedAudio"),
-        os.path.join(train_folder,"CombinedText"),
-        os.path.join(train_folder,"CombinedVSub"),
-        os.path.join(train_folder,"CombinedVAct"),
-        os.path.join(train_folder,"Annotations"),
-        truncate=True
-    )
-    test_folder = args.test_dir
-    test_data = datasets.OMGcombined(
-        os.path.join(test_folder,"CombinedAudio"),
-        os.path.join(test_folder,"CombinedText"),
-        os.path.join(test_folder,"CombinedVSub"),
-        os.path.join(test_folder,"CombinedVAct"),
-        os.path.join(test_folder,"Annotations")
-    )
-    all_data = train_data.join(test_data)
 
-    # Make new train/test split if test_story is specified
-    if args.test_story is not None:
-        test_data, train_data = all_data.extract_story(args.test_story)
-    train_data.split(args.split) # Split training data into chunks
-
+     # Split training data into chunks
+    train_data.split(args.split)
     # Batch data using data loaders
     train_loader = DataLoader(train_data, batch_size=args.batch_size,
                               shuffle=True, collate_fn=datasets.collate_fn)
@@ -210,9 +206,9 @@ def main(args):
     if args.test:
         load_checkpoint(model, model_path, args.cuda)
         with torch.no_grad():
-            pred, _, _, _ = evaluate(test_loader, model, criterion, args)
+            pred, _, _, ccc = evaluate(test_loader, model, criterion, args)
         save_predictions(pred, test_data)
-        sys.exit(0)
+        return ccc
 
     # Load model if continue flag is set
     if args.resume:
@@ -235,6 +231,7 @@ def main(args):
             path = os.path.join(args.model_dir,
                                 "epoch_{}.save".format(epoch)) 
             save_checkpoint(model, path)
+    return best_ccc
 
 if __name__ == "__main__":
     import argparse
@@ -265,10 +262,21 @@ if __name__ == "__main__":
                         help='story to use as test set (optional)')
     parser.add_argument('--load', type=str, default=None,
                         help='path to load trained model')
+    parser.add_argument('--train_dir', type=str, default="./data/Training",
+                        help='path to train data (default: ./data/Training)')
     parser.add_argument('--test_dir', type=str, default="./data/Validation",
                         help='path to test data (default: ./data/Validation)')
     parser.add_argument('--model_dir', type=str, default="./models",
                         help='path to save models')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
-    main(args)
+
+    # Load data
+    train_data, test_data, all_data = load_data(args.train_dir, args.test_dir)
+
+    # Make new train/test split if test_story is specified
+    if args.test_story is not None:
+        test_data, train_data = all_data.extract_story([args.test_story])
+
+    # Continue to rest of script
+    main(train_data, test_data, args)
