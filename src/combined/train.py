@@ -170,7 +170,7 @@ def main(train_data, test_data, args):
     torch.cuda.manual_seed(1)
     np.random.seed(1)
 
-     # Split training data into chunks
+    # Split training data into chunks
     train_data.split(args.split)
     # Batch data using data loaders
     train_loader = DataLoader(train_data, batch_size=args.batch_size,

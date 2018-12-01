@@ -10,6 +10,7 @@ def main(args):
     args.resume = False
     args.load = None
     model_dir = args.model_dir
+    split = args.split
 
     # Load all data
     _, _, all_data = train.load_data(args.train_dir, args.test_dir)
@@ -24,10 +25,12 @@ def main(args):
         
         # Train and compute best CCC on test set
         args.test = False
+        args.split = split
         test_ccc[story] = train.main(train_data, test_data, args)
 
         # Test model on training set
         args.test = True
+        args.split = 1
         train_ccc[story] = train.main(train_data, train_data, args)
 
     # Print and save results
