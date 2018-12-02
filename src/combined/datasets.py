@@ -14,7 +14,7 @@ def len_to_mask(lengths):
     """Converts list of sequence lengths to a mask tensor."""
     mask = torch.arange(max(lengths)).expand(len(lengths), max(lengths))
     mask = mask < torch.tensor(lengths).unsqueeze(1)
-    return mask
+    return mask.unsqueeze(-1)
 
 def collate_fn(data):
     """Collates variable length sequences into padded batch tensor."""
@@ -39,7 +39,7 @@ def collate_fn(data):
     lengths = list(lengths)
     for modality in data:
         padded.append(merge(modality, max(lengths)))
-    mask = len_to_mask(lenghts)
+    mask = len_to_mask(lengths)
     return tuple(padded + [mask, lengths])
 
 class OMGcombined(Dataset):
@@ -56,7 +56,7 @@ class OMGcombined(Dataset):
                  v_sub_path=None, v_act_path=None, val_path=None,
                  pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
                  fps=25.0, chunk_dur=1.0, split_ratio=1, truncate=False,
-                 dataset=None):
+                 normalize=False, dataset=None):
         # Copy construct if dataset is provided
         if dataset is not None:
             self.copy(dataset)
@@ -133,6 +133,10 @@ class OMGcombined(Dataset):
             self.v_act_data.append(v_act)
             self.val_data.append(val)
 
+        # Normalize inputs
+        if normalize:
+            self.normalize()
+            
         # Split data to create more examples
         self.split(split_ratio)
             
@@ -143,6 +147,36 @@ class OMGcombined(Dataset):
         return (self.audio_split[i], self.text_split[i],
                 self.v_sub_split[i], self.v_act_split[i], self.val_split[i])
 
+    def normalize(self):
+        """Rescale all inputs to [-1, 1] range."""
+        audio_max = np.stack([a.max(0) for a in self.audio_data]).max(0)
+        text_max = np.stack([a.max(0) for a in self.text_data]).max(0)
+        v_sub_max = np.stack([a.max(0) for a in self.v_sub_data]).max(0)
+        v_act_max = np.stack([a.max(0) for a in self.v_act_data]).max(0)
+
+        audio_min = np.stack([a.min(0) for a in self.audio_data]).min(0)
+        text_min = np.stack([a.min(0) for a in self.text_data]).min(0)
+        v_sub_min = np.stack([a.min(0) for a in self.v_sub_data]).min(0)
+        v_act_min = np.stack([a.min(0) for a in self.v_act_data]).min(0)
+
+        audio_rng = audio_max - audio_min
+        audio_rng = audio_rng * (audio_rng > 0) + 1e-10 * (audio_rng <= 0)
+        text_rng = text_max - text_min
+        text_rng = text_rng * (text_rng > 0) + 1e-10 * (text_rng <= 0)
+        v_sub_rng = v_sub_max - v_sub_min
+        v_sub_rng = v_sub_rng * (v_sub_rng > 0) + 1e-10 * (v_sub_rng <= 0)
+        v_act_rng = v_act_max - v_act_min
+        v_act_rng = v_act_rng * (v_act_rng > 0) + 1e-10 * (v_act_rng <= 0)
+        
+        self.audio_data = [(a-audio_min) / audio_rng * 2 - 1 for
+                           a in self.audio_data]
+        self.text_data = [(a-text_min) / text_rng * 2 - 1 for
+                           a in self.text_data]
+        self.v_sub_data = [(a-v_sub_min) / v_sub_rng * 2 - 1 for
+                           a in self.v_sub_data]
+        self.v_act_data = [(a-v_act_min) / v_act_rng * 2 - 1 for
+                           a in self.v_act_data]
+        
     def split(self, n):
         """Splits each sequence into n chunks."""
         self.split_ratio = n
@@ -225,6 +259,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--folder', type=str, default="./data/Training",
                         help='dataset base folder')
+    parser.add_argument('--normalize', action='store_true', default=False,
+                        help='whether to normalize inputs')
     args = parser.parse_args()
 
     audio_path = os.path.join(args.folder, "CombinedAudio")
@@ -253,3 +289,6 @@ if __name__ == "__main__":
                 len(v_sub) == len(v_act) and
                 len(v_act) == len(val)):
             print("WARNING: Mismatched sequence lengths.")
+    if args.normalize:
+        print("Normalizing data.")
+        dataset.normalize()

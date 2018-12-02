@@ -49,6 +49,7 @@ class CombinedLSTM(nn.Module):
                 self.dec[m] = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
                                             nn.ReLU(),
                                             nn.Linear(embed_dim, self.dims[m]))
+                self.add_module('dec_{}'.format(m), self.dec[m])
         # Enable CUDA if flag is set
         self.use_cuda = use_cuda
         if self.use_cuda:
@@ -57,11 +58,9 @@ class CombinedLSTM(nn.Module):
     def forward(self, inputs, mask, lengths):
         # Get batch dim
         batch_size, seq_len = len(lengths), max(lengths)
-        # Flatten temporal dimension
-        for m in self.mods:
-            inputs[m] = inputs[m].view(-1, self.dims[m])
         # Convert raw features into equal-dimensional embeddings
-        embed = torch.cat([self.embed[m](inputs[m]) for m in self.mods], 1)
+        embed = torch.cat([self.embed[m](inputs[m].view(-1, self.dims[m]))
+                           for m in self.mods], 1)
         # Compute attention weights
         attn = self.attn(embed)
         # Unflatten temporal dimension
@@ -88,13 +87,13 @@ class CombinedLSTM(nn.Module):
         # Decode the context for each time step
         target = self.dec_target(context).view(batch_size, seq_len, 1)
         # Mask target entries that exceed sequence lengths
-        target = target * mask
+        target = target * mask.float()
         # Reconstruct each modality if flag is set
         if self.reconstruct:
             recon = dict()
             for m in self.mods:
                 recon[m] = self.dec[m](context).view(batch_size, seq_len, -1)
-                recon[m] = recon[m] * mask
+                recon[m] = recon[m] * mask.float()
             return target, recon
         else:
             return target, None

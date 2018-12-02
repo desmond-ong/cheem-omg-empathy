@@ -61,7 +61,7 @@ def train(loader, model, criterion, optimizer, epoch, args):
                 # MSE loss between reconstruction at t and input at t+1
                 m_loss = criterion(recon[m][:,:-1], inputs[m][:,1:])
                 # Divide loss by modality dims and number to keep balance
-                batch_loss += m_loss / (model.dims[m] * len(model.mods))
+                batch_loss += 0.05*m_loss / (model.dims[m] * len(model.mods))
         # Accumulate total loss for epoch
         loss += batch_loss
         # Average over number of non-padding datapoints before stepping
@@ -195,9 +195,8 @@ def main(train_data, test_data, args):
     # Construct audio-text-visual LSTM model
     dims = {'audio': 990, 'text': 300, 'v_sub': 4096, 'v_act': 4096}
     modalities = tuple(args.inputs.split(','))
-    model = CombinedLSTM(mods=modalities,
-                         dims=(dims[m] for m in modalities),
-                         use_cuda=args.cuda)
+    model = CombinedLSTM(mods=modalities, dims=(dims[m] for m in modalities),
+                         reconstruct=args.recon, use_cuda=args.cuda)
 
     # Setup loss and optimizer
     criterion = nn.MSELoss(reduction='sum')
@@ -263,11 +262,13 @@ if __name__ == "__main__":
                         help='whether to predict differences (default: false)')
     parser.add_argument('--recon', action='store_true', default=False,
                         help='whether to reconstruct inputs (default: false)')
+    parser.add_argument('--normalize', action='store_true', default=False,
+                        help='whether to normalize inputs (default: false)')
     parser.add_argument('--resume', action='store_true', default=False,
                         help='resume training loaded model (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
                         help='evaluate without training (default: false)')
-    parser.add_argument('--test_story', type=int, default=None,
+    parser.add_argument('--test_story', type=str, default="1",
                         help='story to use as test set (optional)')
     parser.add_argument('--load', type=str, default=None,
                         help='path to load trained model')
@@ -283,9 +284,12 @@ if __name__ == "__main__":
     # Load data
     train_data, test_data, all_data = load_data(args.train_dir, args.test_dir)
 
-    # Make new train/test split if test_story is specified
-    if args.test_story is not None:
-        test_data, train_data = all_data.extract_story([args.test_story])
+    # Normalize inputs
+    if args.normalize:
+        all_data.normalize()
+    
+    # Make new train/test split
+    test_data, train_data = all_data.extract_story([args.test_story])
 
     # Continue to rest of script
     main(train_data, test_data, args)
