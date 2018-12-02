@@ -82,6 +82,8 @@ if __name__ == "__main__":
                         help='save model after this many epochs (default: 10)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
+    parser.add_argument('--recon', action='store_true', default=False,
+                        help='whether to reconstruct inputs (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
                         help='evaluate without training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
