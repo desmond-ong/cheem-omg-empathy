@@ -170,6 +170,7 @@ def load_data(train_dir, test_dir):
         os.path.join(test_dir,"Annotations")
     )
     all_data = train_data.join(test_data)
+    print("Done.")
     return train_data, test_data, all_data
     
 def main(train_data, test_data, args):
@@ -178,15 +179,13 @@ def main(train_data, test_data, args):
     torch.cuda.manual_seed(1)
     np.random.seed(1)
 
-     # Split training data into chunks
+    # Split training data into chunks
     train_data.split(args.split)
     # Batch data using data loaders
     train_loader = DataLoader(train_data, batch_size=args.batch_size,
                               shuffle=True, collate_fn=datasets.collate_fn)
     test_loader = DataLoader(test_data, batch_size=1,
-                             shuffle=False, collate_fn=datasets.collate_fn)
-    print("Done.")
-    
+                             shuffle=False, collate_fn=datasets.collate_fn)    
     # Create path to save models and predictions
     if not os.path.exists(args.model_dir):
         os.makedirs(args.model_dir)
