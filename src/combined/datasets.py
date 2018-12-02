@@ -39,7 +39,8 @@ def collate_fn(data):
     lengths = list(lengths)
     for modality in data:
         padded.append(merge(modality, max(lengths)))
-    return tuple(padded + [lengths])
+    mask = len_to_mask(lenghts)
+    return tuple(padded + [mask, lengths])
 
 class OMGcombined(Dataset):
     """Dataset that loads features for each modality and valence ratings.

@@ -45,16 +45,24 @@ def train(loader, model, criterion, optimizer, epoch, args):
             for i in range(len(batch)-1):
                 batch[i] = batch[i].cuda()
         # Unpack batch
-        audio, text, v_sub, v_act, target, lengths = batch
+        audio, text, v_sub, v_act, target, mask, lengths = batch
         inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
         # Compute differences for target
         if args.diff:
             target = target[:,1:] - target[:,:-1]
             target = torch.cat([torch.zeros(batch_size, 1, 1), target], dim=1)
         # Run forward pass.
-        output = model(inputs, lengths)
+        output, recon = model(inputs, mask, lengths)
         # Compute loss and gradients
         batch_loss = criterion(output, target)
+        # Compute reconstruction loss if recon flag is set
+        if args.recon:
+            for m in model.mods:
+                # MSE loss between reconstruction at t and input at t+1
+                m_loss = criterion(recon[m][:,:-1], inputs[m][:,1:])
+                # Divide loss by modality dims and number to keep balance
+                batch_loss += m_loss / (model.dims[m] * len(model.mods))
+        # Accumulate total loss for epoch
         loss += batch_loss
         # Average over number of non-padding datapoints before stepping
         batch_loss /= sum(lengths)
@@ -89,11 +97,11 @@ def evaluate(loader, model, criterion, args):
             for i in range(len(batch)-1):
                 batch[i] = batch[i].cuda()
         # Unpack batch
-        audio, text, v_sub, v_act, target, lengths = batch
+        audio, text, v_sub, v_act, target, mask, lengths = batch
         inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
         # Run forward pass.
-        output = model(inputs, lengths)
-        # Compute loss and gradients
+        output, recon = model(inputs, mask, lengths)
+        # Compute loss (only for target)
         if args.diff:
             batch_loss = criterion(output, diff)
         else:
@@ -254,6 +262,8 @@ if __name__ == "__main__":
                         help='enables CUDA training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
                         help='whether to predict differences (default: false)')
+    parser.add_argument('--recon', action='store_true', default=False,
+                        help='whether to reconstruct inputs (default: false)')
     parser.add_argument('--resume', action='store_true', default=False,
                         help='resume training loaded model (default: false)')
     parser.add_argument('--test', action='store_true', default=False,

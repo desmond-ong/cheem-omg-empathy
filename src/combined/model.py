@@ -10,8 +10,8 @@ class CombinedLSTM(nn.Module):
     """Basic audio-text-visual LSTM model with feature level fusion."""
     
     def __init__(self, mods=('audio', 'text', 'v_sub', 'v_act'),
-                 dims=(990, 300, 4096, 4096), embed_dim=128,
-                 hidden_dim=512, n_layers=1, attn_len=3, use_cuda=False):
+                 dims=(990, 300, 4096, 4096), embed_dim=128, hidden_dim=512,
+                 n_layers=1, attn_len=3, reconstruct=False, use_cuda=False):
         super(CombinedLSTM, self).__init__()
         self.mods = mods
         self.n_mods = len(mods)
@@ -20,6 +20,7 @@ class CombinedLSTM(nn.Module):
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
         self.attn_len = attn_len
+        self.reconstruct = reconstruct
         
         # Create raw-to-embed FC+Dropout layer for each modality
         self.embed = dict()
@@ -38,15 +39,22 @@ class CombinedLSTM(nn.Module):
         self.lstm = nn.LSTM(len(mods) * embed_dim, hidden_dim,
                             n_layers, batch_first=True)
         # Regression network from LSTM hidden states to predicted valence
-        self.h_to_out = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
-                                      nn.ReLU(),
-                                      nn.Linear(embed_dim, 1))
+        self.dec_target = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
+                                        nn.ReLU(),
+                                        nn.Linear(embed_dim, 1))
+        # Decoder networks to reconstruct each modality
+        if self.reconstruct:
+            self.dec = dict()
+            for m in self.mods:
+                self.dec[m] = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
+                                            nn.ReLU(),
+                                            nn.Linear(embed_dim, self.dims[m]))
         # Enable CUDA if flag is set
         self.use_cuda = use_cuda
         if self.use_cuda:
             self.cuda()
 
-    def forward(self, inputs, lengths):
+    def forward(self, inputs, mask, lengths):
         # Get batch dim
         batch_size, seq_len = len(lengths), max(lengths)
         # Flatten temporal dimension
@@ -76,12 +84,20 @@ class CombinedLSTM(nn.Module):
                                i in range(self.attn_len)], dim=-1)
         context = torch.sum(attn.unsqueeze(2) * stacked, dim=-1)
         # Flatten temporal dimension
-        out = context.reshape(-1, self.hidden_dim)
+        context = context.reshape(-1, self.hidden_dim)
         # Decode the context for each time step
-        out = self.h_to_out(out)
-        # Unflatten temporal dimension
-        out = out.view(batch_size, seq_len, 1)
-        return out
+        target = self.dec_target(context).view(batch_size, seq_len, 1)
+        # Mask target entries that exceed sequence lengths
+        target = target * mask
+        # Reconstruct each modality if flag is set
+        if self.reconstruct:
+            recon = dict()
+            for m in self.mods:
+                recon[m] = self.dec[m](context).view(batch_size, seq_len, -1)
+                recon[m] = recon[m] * mask
+            return target, recon
+        else:
+            return target, None
 
     def pad_shift(self, x, shift):
         """Shift 3D tensor forwards in time with zero padding."""
