@@ -6,25 +6,38 @@ import train
 import torch
 
 def main(args):
-    # Set constant flags to be passed on to train.main
-    args.resume = False
-    args.load = None
+    # Extract flags that need to be overwritten for train.main
+    test = args.test
     model_dir = args.model_dir
     split = args.split
+
+    # Set constant flags to be passed on to train.main    
+    args.load = None
+    args.resume = False
+    args.test_story = None
 
     # Load all data
     _, _, all_data = train.load_data(args.train_dir, args.test_dir)
 
     # Train and test with each story as the validation set
     train_ccc, test_ccc = dict(), dict()
-    for story in set(all_data.stories):
+    for story in sorted(list(set(all_data.stories))):
+        print("---")
+        print("Story {} as validation".format(story))
+        print("---")
+        
+        # Split data
         test_data, train_data = all_data.extract_story([story])
 
-        # Creat new model directory
+        # Create new model directory
         args.model_dir = os.path.join(model_dir, "val_on_{}".format(story))
+
+        # Load best model for story if test flag is set
+        if test:
+            args.load = os.path.join(args.model_dir, "best.save")
         
-        # Train and compute best CCC on test set
-        args.test = False
+        # Compute best CCC on test set
+        args.test = test
         args.split = split
         test_ccc[story] = train.main(train_data, test_data, args)
 
@@ -34,16 +47,20 @@ def main(args):
         train_ccc[story] = train.main(train_data, train_data, args)
 
     # Print and save results
-    results_path = os.join(model_dir, "crossval.csv")
+    results_path = os.path.join(model_dir, "crossval.csv")
     results_f = open(results_path, 'wb')
     writer = csv.writer(results_f)
     print("===")
     print("Val. Story\tTrain CCC\tVal. CCC")
     writer.writerow(["Val. Story", "Train CCC", "Val. CCC"])
-    for story in train_ccc.keys():
-        print("{:i}\t{:0.3f}\t{0.3f}".\
+    for story in sorted(train_ccc.keys()):
+        print("{}\t\t{:0.3f}\t\t{:0.3f}".\
               format(story, train_ccc[story], test_ccc[story]))
         writer.writerow([story, train_ccc[story], test_ccc[story]])
+    train_mean = sum(train_ccc.values()) / len(train_ccc)
+    test_mean = sum(test_ccc.values()) / len(test_ccc)
+    print("Average\t\t{:0.3f}\t\t{:0.3f}".format(train_mean, test_mean))
+    writer.writerow(["Average", train_mean, test_mean])
     results_f.close()
         
 if __name__ == "__main__":
@@ -65,10 +82,10 @@ if __name__ == "__main__":
                         help='save model after this many epochs (default: 10)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
+    parser.add_argument('--test', action='store_true', default=False,
+                        help='evaluate without training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
                         help='whether to predict differences (default: false)')
-    parser.add_argument('--test_story', type=int, default=None,
-                        help='story to use as test set (optional)')
     parser.add_argument('--train_dir', type=str, default="./data/Training",
                         help='path to train data (default: ./data/Training)')
     parser.add_argument('--test_dir', type=str, default="./data/Validation",
