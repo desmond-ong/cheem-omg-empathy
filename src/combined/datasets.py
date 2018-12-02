@@ -72,14 +72,14 @@ class OMGcombined(Dataset):
                       in sorted(os.listdir(text_path))
                       if re.match(pattern, fn) is not None]
         v_sub_files = [os.path.join(v_sub_path, fn) for fn
-                        in sorted(os.listdir(v_sub_path))
-                        if re.match(pattern, fn) is not None]
+                       in sorted(os.listdir(v_sub_path))
+                       if re.match(pattern, fn) is not None]
         v_act_files = [os.path.join(v_act_path, fn) for fn
-                        in sorted(os.listdir(v_act_path))
-                        if re.match(pattern, fn) is not None]
+                       in sorted(os.listdir(v_act_path))
+                       if re.match(pattern, fn) is not None]
         val_files = [os.path.join(val_path, fn) for fn
-                         in sorted(os.listdir(val_path))
-                         if re.match(pattern, fn) is not None]
+                     in sorted(os.listdir(val_path))
+                     if re.match(pattern, fn) is not None]
 
         # Check that number of files are equal
         if not (len(audio_files) == len(text_files) and
