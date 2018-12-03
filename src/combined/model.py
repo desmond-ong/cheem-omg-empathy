@@ -55,7 +55,7 @@ class CombinedLSTM(nn.Module):
         if self.use_cuda:
             self.cuda()
 
-    def forward(self, inputs, mask, lengths):
+    def forward(self, inputs, mask, lengths, output_features=False):
         # Get batch dim
         batch_size, seq_len = len(lengths), max(lengths)
         # Convert raw features into equal-dimensional embeddings
@@ -84,6 +84,10 @@ class CombinedLSTM(nn.Module):
         context = torch.sum(attn.unsqueeze(2) * stacked, dim=-1)
         # Flatten temporal dimension
         context = context.reshape(-1, self.hidden_dim)
+        # Return features before final FC layer if flag is set
+        if output_features:
+            features = self.dec_target[0](context)
+            return features.view(batch_size, seq_len, -1)
         # Decode the context for each time step
         target = self.dec_target(context).view(batch_size, seq_len, 1)
         # Mask target entries that exceed sequence lengths
@@ -117,29 +121,29 @@ class CombinedLSTM(nn.Module):
 if __name__ == "__main__":
     # Test code by loading dataset and running through model
     import os
-    from datasets import OMGcombined
-    
-    base_folder = "./data/Training"
-    audio_path = os.path.join(base_folder, "CombinedAudio")
-    text_path = os.path.join(base_folder, "CombinedText")
-    v_sub_path = os.path.join(base_folder, "CombinedVSub")
-    v_act_path = os.path.join(base_folder, "CombinedVAct")
-    valence_path = os.path.join(base_folder, "Annotations")
+    from datasets import OMGMulti, collate_fn
 
+    base_folder = "./data/Training"
+    in_names = ['audio', 'text', 'v_sub', 'v_act']
+    in_paths = dict()
+    in_paths['audio'] = os.path.join(base_folder, "CombinedAudio")
+    in_paths['text'] = os.path.join(base_folder, "CombinedText")
+    in_paths['v_sub'] = os.path.join(base_folder, "CombinedVSub")
+    in_paths['v_act'] = os.path.join(base_folder, "CombinedVAct")
+    val_path = os.path.join(base_folder, "Annotations")
+    
     print("Loading data...")
-    dataset = OMGcombined(audio_path, text_path,
-                          v_sub_path, v_act_path, valence_path,
-                          truncate=True)
+    dataset = OMGMulti(in_names, [in_paths[n] for n in in_names], val_path)
     print("Building model...")
     model = CombinedLSTM()
     model.eval()
     print("Passing a sample through the model...")
-    audio, text, v_sub, v_act, valence = dataset[0]
-    lengths = [audio.shape[0]]
+    audio, text, v_sub, v_act, val, mask, lengths = collate_fn([dataset[0]])
     inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
     for m in inputs.keys():
-        inputs[m] = torch.tensor(inputs[m]).unsqueeze(0).float()
-    out = model(inputs, lengths).view(-1)
+        inputs[m] = torch.tensor(inputs[m]).float()
+    out, _ = model(inputs, mask, lengths)
+    out = out.view(-1)
     print("Predicted valences:")
     for o in out:
         print("{:+0.3f}".format(o.item()))
