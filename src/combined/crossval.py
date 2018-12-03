@@ -17,7 +17,7 @@ def main(args):
     args.test_story = None
 
     # Load all data
-    _, _, all_data = train.load_data(args.train_dir, args.test_dir)
+    _, _, all_data = train.load_data(args.mods, args.train_dir, args.test_dir)
 
     # Train and test with each story as the validation set
     train_ccc, test_ccc = dict(), dict()
@@ -31,20 +31,25 @@ def main(args):
 
         # Create new model directory
         args.model_dir = os.path.join(model_dir, "val_on_{}".format(story))
-
-        # Load best model for story if test flag is set
-        if test:
-            args.load = os.path.join(args.model_dir, "best.save")
         
-        # Compute best CCC on test set
-        args.test = test
-        args.split = split
-        test_ccc[story] = train.main(train_data, test_data, args)
+        if test:
+            # Load best model for story if test flag is set
+            args.load = os.path.join(args.model_dir, "best.save")
+        else:
+            # Train model
+            args.test = False
+            args.split = split
+            args.pred_dir = os.path.join(args.model_dir, "train_out")
+            train.main(train_data, test_data, args)
 
-        # Test model on training set
+        # Test model on test and training set
+        print("Evaluating best model...")
         args.test = True
         args.split = 1
+        args.pred_dir = os.path.join(args.model_dir, "train_out")
         train_ccc[story] = train.main(train_data, train_data, args)
+        args.pred_dir = os.path.join(args.model_dir, "test_out")
+        test_ccc[story] = train.main(train_data, test_data, args)
 
     # Print and save results
     results_path = os.path.join(model_dir, "crossval.csv")
@@ -66,7 +71,7 @@ def main(args):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--inputs', type=str, default="audio,text,v_sub,v_act",
+    parser.add_argument('--mods', type=str, default="audio,text,v_sub,v_act",
                         help='comma-separated input modalities (default: all)')
     parser.add_argument('--batch_size', type=int, default=25, metavar='N',
                         help='input batch size for training (default: 25)')
@@ -84,6 +89,8 @@ if __name__ == "__main__":
                         help='enables CUDA training (default: false)')
     parser.add_argument('--recon', action='store_true', default=False,
                         help='whether to reconstruct inputs (default: false)')
+    parser.add_argument('--normalize', action='store_true', default=False,
+                        help='whether to normalize inputs (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
                         help='evaluate without training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
@@ -95,6 +102,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_dir', type=str, default="./models",
                         help='path to save models')
     args = parser.parse_args()
-    args.cuda = args.cuda and torch.cuda.is_available()    
+    args.cuda = args.cuda and torch.cuda.is_available()
+    args.mods = args.mods.split(',')
     main(args)
 

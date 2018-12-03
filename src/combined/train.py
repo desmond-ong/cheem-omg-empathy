@@ -138,11 +138,11 @@ def evaluate(loader, model, criterion, args):
           format(loss, corr, ccc))
     return pred, loss, corr, ccc
 
-def save_predictions(pred, dataset):
+def save_predictions(pred, dataset, path):
     for p, subj, story in zip(pred, dataset.subjects, dataset.stories):
         df = pd.DataFrame(p, columns=['valence'])
         fname = "Subject_{}_Story_{}.csv".format(subj, story)
-        df.to_csv(os.path.join("./predictions", fname), index=False)
+        df.to_csv(os.path.join(path, fname), index=False)
 
 def save_checkpoint(model, path):
     torch.save(model.state_dict(), path)
@@ -184,8 +184,8 @@ def main(train_data, test_data, args):
     # Create path to save models and predictions
     if not os.path.exists(args.model_dir):
         os.makedirs(args.model_dir)
-    if not os.path.exists('./predictions'):
-        os.makedirs('./predictions')
+    if not os.path.exists(args.pred_dir):
+        os.makedirs(args.pred_dir)
     
     # Construct audio-text-visual LSTM model
     dims = {'audio': 990, 'text': 300, 'v_sub': 4096, 'v_act': 4096}
@@ -207,7 +207,7 @@ def main(train_data, test_data, args):
         load_checkpoint(model, model_path, args.cuda)
         with torch.no_grad():
             pred, _, _, ccc = evaluate(test_loader, model, criterion, args)
-        save_predictions(pred, test_data)
+        save_predictions(pred, test_data, args.pred_dir)
         return ccc
 
     # Load model if continue flag is set
@@ -272,6 +272,8 @@ if __name__ == "__main__":
                         help='path to test data (default: ./data/Validation)')
     parser.add_argument('--model_dir', type=str, default="./models",
                         help='path to save models')
+    parser.add_argument('--pred_dir', type=str, default="./predictions",
+                        help='path to save predictions')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
     args.mods = tuple(args.mods.split(','))
