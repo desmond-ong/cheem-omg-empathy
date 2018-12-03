@@ -191,12 +191,9 @@ class OMGMulti(Dataset):
 
 class OMGFusion(OMGMulti):
     """Variant of OMGMulti which returns concatenated input features."""
-    def __init__(self, **kwargs):
-        super(OMGFusion, self).__init__(**kwargs)
-    
     def __getitem__(self, i):
-        in_data = np.concatenate([self.in_split[n][i] for n in self.in_names])
-        return in_data, self.val_split[i]
+        in_data = [self.in_split[n][i] for n in self.in_names]
+        return np.concatenate(in_data, axis=1), self.val_split[i]
     
 def len_to_mask(lengths):
     """Converts list of sequence lengths to a mask tensor."""

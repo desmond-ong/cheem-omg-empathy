@@ -43,7 +43,9 @@ def main(args):
             train.main(train_data, test_data, args)
 
         # Test model on test and training set
+        print("---")
         print("Evaluating best model...")
+        print("---")
         args.test = True
         args.split = 1
         args.pred_dir = os.path.join(args.model_dir, "train_out")
