@@ -48,7 +48,7 @@ def train(train_data, test_data):
     # Set up hyper-parameters for support vector regression
     params = {
         'gamma': ['auto'],
-        'C': [0.1, 1.0, 10],
+        'C': [1e-3, 0.01, 0.03, 0.1, 0.3, 1.0],
         'kernel':['rbf']
     }
     params = list(ParameterGrid(params))
