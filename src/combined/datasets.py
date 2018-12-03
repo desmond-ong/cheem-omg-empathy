@@ -10,6 +10,194 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+class OMGMulti(Dataset):
+    """Multimodal dataset for OMG empathy challenge."""
+    
+    def __init__(self, in_names=None, in_paths=None, val_path=None,
+                 pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
+                 fps=25.0, chunk_dur=1.0, split_ratio=1, truncate=False,
+                 normalize=False, dataset=None):
+        """Loads valence ratings and features for each modality.
+
+        in_names -- names of each input modality
+        in_paths -- list of folders containing input features
+        val_path -- folder containing valence ratings
+        pattern -- pattern file name
+        fps -- sampling rate of valence annotations
+        chunk_dur -- duration of time chucks for input features
+        truncate -- if true, truncate to modality with minimum length
+        normalize -- if true, normalize features to [-1,1]
+        dataset -- if provided, copy construct
+        """
+        # Copy construct if dataset is provided
+        if dataset is not None:
+            self.copy(dataset)
+            return
+
+        # Store modality names, ratio of sampling rates
+        self.in_names = in_names
+        self.time_ratio = fps * chunk_dur
+
+        # Load filenames into lists
+        in_files = dict()
+        in_paths = dict(zip(in_names, in_paths))
+        for n in self.in_names:
+            in_files[n] = [os.path.join(in_paths[n], fn) for fn
+                           in sorted(os.listdir(in_paths[n]))
+                           if re.match(pattern, fn) is not None]
+        val_files = [os.path.join(val_path, fn) for fn
+                     in sorted(os.listdir(val_path))
+                     if re.match(pattern, fn) is not None]
+
+        # Check that number of files are equal
+        for n in self.in_names:
+            if len(in_files[n]) != len(val_files):
+                raise Exception("Number of files do not match.")
+
+        # Store subject and story IDs
+        self.subjects = []
+        self.stories = []
+        for fn in sorted(os.listdir(val_path)):
+            match = re.match(pattern, fn)
+            if match:
+                self.subjects.append(match.group(1))
+                self.stories.append(match.group(2))
+        
+        # Load data from files
+        self.val_data = []
+        self.val_orig = []
+        self.in_data = {n: [] for n in self.in_names}
+        for i in range(len(val_files)):
+            # Load and store original valence ratings
+            val = pd.read_csv(val_files[i])
+            self.val_orig.append(np.array(val).flatten())
+            # Average valence across time chunks
+            group_idx = np.arange(len(val)) // self.time_ratio
+            val = np.array(val.groupby(group_idx).mean())
+            seq_len = len(val)
+            self.val_data.append(val)
+            # Load each input modality
+            for n, in_data in self.in_data.iteritems():
+                fp = in_files[n][i]
+                if re.match("^.*\.csv", fp):
+                    d = np.array(pd.read_csv(fp))
+                else: 
+                    d = np.load(fp)
+                if len(d.shape) > 2:
+                    d = d.reshape(d.shape[0], -1)
+                in_data.append(d)
+                if len(d) < seq_len:
+                    seq_len = len(d)
+            # Truncate to minimum sequence length
+            if truncate:
+                self.val_data[-1] = self.val_data[-1][:seq_len]
+                for n in self.in_names:
+                    self.in_data[n][-1] = self.in_data[n][-1][:seq_len]
+
+        # Normalize inputs
+        if normalize:
+            self.normalize()
+            
+        # Split data to create more examples
+        self.split(split_ratio)
+            
+    def __len__(self):
+        return len(self.val_split)
+
+    def __getitem__(self, i):
+        in_data = [self.in_split[n][i] for n in self.in_names]
+        return tuple(in_data + [self.val_split[i]])
+
+    def normalize(self):
+        """Rescale all inputs to [-1, 1] range."""
+        # Find max and min for each dimension of each modality
+        in_max = {n: np.stack([a.max(0) for a in self.in_data[n]]).max(0)
+                  for n in self.in_names}
+        in_min = {n: np.stack([a.min(0) for a in self.in_data[n]]).min(0)
+                  for n in self.in_names}
+        # Compute range per dim and add constant to ensure it is non-zero
+        in_rng = {n: (in_max[n]-in_min[n]) for n in self.in_names}
+        in_rng = {n: in_rng[n] * (in_rng[n] > 0) + 1e-10 * (in_rng[n] <= 0)
+                  for n in self.in_names}
+
+        # Actually rescale the data
+        for n in self.in_names:
+            self.in_data[n] = [(a-in_min[n]) / in_rng[n] * 2 - 1 for
+                               a in self.in_data[n]]
+        
+    def split(self, r):
+        """Splits each sequence into n chunks."""
+        self.split_ratio = r
+        self.in_split = dict()
+        for n in self.in_names:
+            self.in_split[n] = list(itertools.chain.from_iterable(
+                [np.array_split(a, r, 0) for a in self.in_data[n]]))
+        self.val_split = list(itertools.chain.from_iterable(
+            [np.array_split(a, r, 0) for a in self.val_data]))
+    
+    def copy(self, other):
+        """Copy constructor."""
+        self.stories = list(other.stories)
+        self.subjects = list(other.subjects)
+
+        self.in_names = other.in_names
+        self.in_data = {k: list(v) for k, v in other.in_data.iteritems()}
+
+        self.val_data = list(other.val_data)
+        self.val_orig = list(other.val_orig)
+
+        self.time_ratio = other.time_ratio
+        self.split(other.split_ratio)
+    
+    def join(self, other):
+        """Join with another dataset."""
+        if (self.time_ratio != other.time_ratio or
+            self.split_ratio != other.split_ratio):
+            raise Exception("Time and split ratios need to match.")
+        joined = self.__class__(dataset=self)
+        joined.stories += other.stories
+        joined.subjects += other.subjects
+        joined.val_data += other.val_data
+        joined.val_orig += other.val_orig
+        for n in joined.in_names:
+            joined.in_data[n] += other.in_data[n]
+        joined.split(self.split_ratio)
+        return joined
+
+    def extract_story(self, s):
+        """Extract specified story ids to form new train-test split."""
+        extract = self.__class__(dataset=self)
+        remain = self.__class__(dataset=self)
+        # Find indices of specified story
+        idx = [i for i, story in enumerate(self.stories) if story in s]
+        # Extract data for specified story
+        extract.stories = [self.stories[i] for i in idx]
+        extract.subjects = [self.subjects[i] for i in idx]
+        extract.val_data = [self.val_data[i] for i in idx]
+        extract.val_orig = [self.val_orig[i] for i in idx]
+        for n in extract.in_names:
+            extract.in_data[n] = [self.in_data[n][i] for i in idx]
+        # Delete extracted data from remainder
+        for i in sorted(idx, reverse=True):
+            del remain.stories[i]
+            del remain.subjects[i]
+            del remain.val_data[i]
+            del remain.val_orig[i]
+            for n in remain.in_names:
+                del remain.in_data[n][i]
+        extract.split(self.split_ratio)
+        remain.split(self.split_ratio)
+        return extract, remain
+
+class OMGFusion(OMGMulti):
+    """Variant of OMGMulti which returns concatenated input features."""
+    def __init__(self, **kwargs):
+        super(OMGFusion, self).__init__(**kwargs)
+    
+    def __getitem__(self, i):
+        in_data = np.concatenate([self.in_split[n][i] for n in self.in_names])
+        return in_data, self.val_split[i]
+    
 def len_to_mask(lengths):
     """Converts list of sequence lengths to a mask tensor."""
     mask = torch.arange(max(lengths)).expand(len(lengths), max(lengths))
@@ -41,217 +229,6 @@ def collate_fn(data):
         padded.append(merge(modality, max(lengths)))
     mask = len_to_mask(lengths)
     return tuple(padded + [mask, lengths])
-
-class OMGcombined(Dataset):
-    """Dataset that loads features for each modality and valence ratings.
-    
-    audio_path -- Folder of OpenSMILE features in CSV format
-    text_path -- Folder of text features in NPY format
-    v_sub_path -- Folder of subject visual features in NPY format
-    v_act_path -- Folder of actor visual features in NPY format
-    val_path -- Folder of valence annotations in CSV format
-    """
-    
-    def __init__(self, audio_path=None, text_path=None,
-                 v_sub_path=None, v_act_path=None, val_path=None,
-                 pattern="Subject_(\d+)_Story_(\d+)(?:_\w*)?",
-                 fps=25.0, chunk_dur=1.0, split_ratio=1, truncate=False,
-                 normalize=False, dataset=None):
-        # Copy construct if dataset is provided
-        if dataset is not None:
-            self.copy(dataset)
-            return
-        
-        self.time_ratio = fps * chunk_dur
-
-        # Load files into list
-        audio_files = [os.path.join(audio_path, fn) for fn
-                       in sorted(os.listdir(audio_path))
-                       if re.match(pattern, fn) is not None]
-        text_files = [os.path.join(text_path, fn) for fn
-                      in sorted(os.listdir(text_path))
-                      if re.match(pattern, fn) is not None]
-        v_sub_files = [os.path.join(v_sub_path, fn) for fn
-                       in sorted(os.listdir(v_sub_path))
-                       if re.match(pattern, fn) is not None]
-        v_act_files = [os.path.join(v_act_path, fn) for fn
-                       in sorted(os.listdir(v_act_path))
-                       if re.match(pattern, fn) is not None]
-        val_files = [os.path.join(val_path, fn) for fn
-                     in sorted(os.listdir(val_path))
-                     if re.match(pattern, fn) is not None]
-
-        # Check that number of files are equal
-        if not (len(audio_files) == len(text_files) and
-                len(text_files) == len(v_sub_files) and
-                len(v_sub_files) == len(v_act_files) and
-                len(v_act_files) == len(val_files)):
-            raise Exception("Number of files do not match.")
-
-        # Store subject and story IDs
-        self.subjects = []
-        self.stories = []
-        for fn in sorted(os.listdir(val_path)):
-            match = re.match(pattern, fn)
-            if match:
-                self.subjects.append(match.group(1))
-                self.stories.append(match.group(2))
-        
-        # Load data for each video
-        self.audio_data = []
-        self.text_data = []
-        self.v_sub_data = []
-        self.v_act_data = []
-        self.val_data = []
-        self.val_orig = []
-        for f_au, f_te, f_vs, f_va, f_vl in \
-            zip(audio_files, text_files, v_sub_files, v_act_files, val_files):
-            # Load each input modality
-            audio = np.array(pd.read_csv(f_au))
-            text = np.load(f_te)
-            v_sub = np.load(f_vs).squeeze(1)
-            v_act = np.load(f_va).squeeze(1)
-            # Load and store original valence ratings
-            val = pd.read_csv(f_vl)
-            self.val_orig.append(np.array(val).flatten())
-            # Average valence across time chunks
-            group_idx = np.arange(len(val)) // self.time_ratio
-            val = np.array(val.groupby(group_idx).mean())
-            # Truncate to minimum sequence length
-            if truncate:
-                seq_len =\
-                    min([len(d) for d in [audio, text, v_sub, v_act, val]])
-                audio = audio[:seq_len]
-                text = text[:seq_len]
-                v_sub = v_sub[:seq_len]
-                v_act = v_act[:seq_len]
-                val = val[:seq_len]
-            # Append data
-            self.audio_data.append(audio)
-            self.text_data.append(text)
-            self.v_sub_data.append(v_sub)
-            self.v_act_data.append(v_act)
-            self.val_data.append(val)
-
-        # Normalize inputs
-        if normalize:
-            self.normalize()
-            
-        # Split data to create more examples
-        self.split(split_ratio)
-            
-    def __len__(self):
-        return len(self.val_split)
-
-    def __getitem__(self, i):
-        return (self.audio_split[i], self.text_split[i],
-                self.v_sub_split[i], self.v_act_split[i], self.val_split[i])
-
-    def normalize(self):
-        """Rescale all inputs to [-1, 1] range."""
-        audio_max = np.stack([a.max(0) for a in self.audio_data]).max(0)
-        text_max = np.stack([a.max(0) for a in self.text_data]).max(0)
-        v_sub_max = np.stack([a.max(0) for a in self.v_sub_data]).max(0)
-        v_act_max = np.stack([a.max(0) for a in self.v_act_data]).max(0)
-
-        audio_min = np.stack([a.min(0) for a in self.audio_data]).min(0)
-        text_min = np.stack([a.min(0) for a in self.text_data]).min(0)
-        v_sub_min = np.stack([a.min(0) for a in self.v_sub_data]).min(0)
-        v_act_min = np.stack([a.min(0) for a in self.v_act_data]).min(0)
-
-        audio_rng = audio_max - audio_min
-        audio_rng = audio_rng * (audio_rng > 0) + 1e-10 * (audio_rng <= 0)
-        text_rng = text_max - text_min
-        text_rng = text_rng * (text_rng > 0) + 1e-10 * (text_rng <= 0)
-        v_sub_rng = v_sub_max - v_sub_min
-        v_sub_rng = v_sub_rng * (v_sub_rng > 0) + 1e-10 * (v_sub_rng <= 0)
-        v_act_rng = v_act_max - v_act_min
-        v_act_rng = v_act_rng * (v_act_rng > 0) + 1e-10 * (v_act_rng <= 0)
-        
-        self.audio_data = [(a-audio_min) / audio_rng * 2 - 1 for
-                           a in self.audio_data]
-        self.text_data = [(a-text_min) / text_rng * 2 - 1 for
-                           a in self.text_data]
-        self.v_sub_data = [(a-v_sub_min) / v_sub_rng * 2 - 1 for
-                           a in self.v_sub_data]
-        self.v_act_data = [(a-v_act_min) / v_act_rng * 2 - 1 for
-                           a in self.v_act_data]
-        
-    def split(self, n):
-        """Splits each sequence into n chunks."""
-        self.split_ratio = n
-        self.audio_split = list(itertools.chain.from_iterable(
-            [np.array_split(a, n, 0) for a in self.audio_data]))
-        self.text_split = list(itertools.chain.from_iterable(
-            [np.array_split(a, n, 0) for a in self.text_data]))
-        self.v_sub_split = list(itertools.chain.from_iterable(
-            [np.array_split(a, n, 0) for a in self.v_sub_data]))
-        self.v_act_split = list(itertools.chain.from_iterable(
-            [np.array_split(a, n, 0) for a in self.v_act_data]))
-        self.val_split = list(itertools.chain.from_iterable(
-            [np.array_split(a, n, 0) for a in self.val_data]))
-    
-    def copy(self, other):
-        """Copy constructor"""
-        self.stories = list(other.stories)
-        self.subjects = list(other.subjects)
-
-        self.audio_data = list(other.audio_data)
-        self.text_data = list(other.text_data)
-        self.v_sub_data = list(other.v_sub_data)
-        self.v_act_data = list(other.v_act_data)
-
-        self.val_data = list(other.val_data)
-        self.val_orig = list(other.val_orig)
-
-        self.time_ratio = other.time_ratio
-        self.split(other.split_ratio)
-    
-    def join(self, other):
-        """Join with another dataset."""
-        if (self.time_ratio != other.time_ratio or
-            self.split_ratio != other.split_ratio):
-            raise Exception("Time and split ratios need to match.")
-        joined = self.__class__(dataset=self)
-        joined.stories += other.stories
-        joined.subjects += other.subjects
-        joined.audio_data += other.audio_data
-        joined.text_data += other.text_data
-        joined.v_sub_data += other.v_sub_data
-        joined.v_act_data += other.v_act_data
-        joined.val_data += other.val_data
-        joined.val_orig += other.val_orig
-        joined.split(self.split_ratio)
-        return joined
-
-    def extract_story(self, s):
-        """Extract specified story ids to form new train-test split."""
-        extract = self.__class__(dataset=self)
-        remain = self.__class__(dataset=self)
-        # Find indices of specified story
-        idx = [i for i, story in enumerate(self.stories) if story in s]
-        # Extract data for specified story
-        extract.stories = [self.stories[i] for i in idx]
-        extract.subjects = [self.subjects[i] for i in idx]
-        extract.audio_data = [self.audio_data[i] for i in idx]
-        extract.text_data = [self.text_data[i] for i in idx]
-        extract.v_sub_data = [self.v_sub_data[i] for i in idx]
-        extract.v_act_data = [self.v_act_data[i] for i in idx]
-        extract.val_data = [self.val_data[i] for i in idx]
-        extract.val_orig = [self.val_orig[i] for i in idx]
-        # Delete extracted data from remainder
-        for i in sorted(idx, reverse=True):
-            del remain.stories[i]
-            del remain.subjects[i]
-            del remain.audio_data[i]
-            del remain.text_data[i]
-            del remain.v_sub_data[i]
-            del remain.v_act_data[i]
-            del remain.val_data[i]
-            del remain.val_orig[i]
-        extract.split(self.split_ratio)
-        remain.split(self.split_ratio)
-        return extract, remain
     
 if __name__ == "__main__":
     # Test code by loading dataset
@@ -263,15 +240,16 @@ if __name__ == "__main__":
                         help='whether to normalize inputs')
     args = parser.parse_args()
 
-    audio_path = os.path.join(args.folder, "CombinedAudio")
-    text_path = os.path.join(args.folder, "CombinedText")
-    v_sub_path = os.path.join(args.folder, "CombinedVSub")
-    v_act_path = os.path.join(args.folder, "CombinedVAct")
+    in_names = ['audio', 'text', 'v_sub', 'v_act']
+    in_paths = dict()
+    in_paths['audio'] = os.path.join(args.folder, "CombinedAudio")
+    in_paths['text'] = os.path.join(args.folder, "CombinedText")
+    in_paths['v_sub'] = os.path.join(args.folder, "CombinedVSub")
+    in_paths['v_act'] = os.path.join(args.folder, "CombinedVAct")
     val_path = os.path.join(args.folder, "Annotations")
 
     print("Loading data...")
-    dataset = OMGcombined(audio_path, text_path,
-                          v_sub_path, v_act_path, val_path)
+    dataset = OMGMulti(in_names, [in_paths[n] for n in in_names], val_path)
     print("Testing batch collation...")
     data = collate_fn([dataset[i] for i in range(min(10, len(dataset)))])
     print("Batch shapes:")

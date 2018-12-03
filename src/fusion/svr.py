@@ -37,6 +37,7 @@ def main(args):
         ccc = eval_ccc(y_test, y_pred)
         print('CCC:', ccc)
 
+        # Save best parameters and model
         if ccc > best_ccc:
             best_ccc = ccc
             best_params = p 

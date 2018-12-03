@@ -36,17 +36,18 @@ def train(loader, model, criterion, optimizer, epoch, args):
     for batch_num, batch in enumerate(loader):
         batch = list(batch)
         batch_size = len(batch[-1])
-        # Convert to float
+        # Convert tensors to float
         if batch_size == 1:
             for i in range(len(batch)-1):
                 batch[i] = batch[i].float()
-        # Convert to CUDA
+        # Convert tensors to CUDA
         if args.cuda:
             for i in range(len(batch)-1):
                 batch[i] = batch[i].cuda()
         # Unpack batch
-        audio, text, v_sub, v_act, target, mask, lengths = batch
-        inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
+        inputs = dict(zip(args.mods, batch[:-3]))
+        target = batch[-3]
+        mask, lengths = batch[-2:]
         # Compute differences for target
         if args.diff:
             target = target[:,1:] - target[:,:-1]
@@ -97,8 +98,9 @@ def evaluate(loader, model, criterion, args):
             for i in range(len(batch)-1):
                 batch[i] = batch[i].cuda()
         # Unpack batch
-        audio, text, v_sub, v_act, target, mask, lengths = batch
-        inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
+        inputs = dict(zip(args.mods, batch[:-3]))
+        target = batch[-3]
+        mask, lengths = batch[-2:]
         # Run forward pass.
         output, recon = model(inputs, mask, lengths)
         # Compute loss (only for target)
@@ -152,23 +154,16 @@ def load_checkpoint(model, path, use_cuda=False):
         checkpoint = torch.load(path, map_location=lambda s, l: s)
     model.load_state_dict(checkpoint)
 
-def load_data(train_dir, test_dir):
+def load_data(modalities, train_dir, test_dir):
     print("Loading data...")
-    train_data = datasets.OMGcombined(
-        os.path.join(train_dir,"CombinedAudio"),
-        os.path.join(train_dir,"CombinedText"),
-        os.path.join(train_dir,"CombinedVSub"),
-        os.path.join(train_dir,"CombinedVAct"),
-        os.path.join(train_dir,"Annotations"),
-        truncate=True
-    )
-    test_data = datasets.OMGcombined(
-        os.path.join(test_dir,"CombinedAudio"),
-        os.path.join(test_dir,"CombinedText"),
-        os.path.join(test_dir,"CombinedVSub"),
-        os.path.join(test_dir,"CombinedVAct"),
-        os.path.join(test_dir,"Annotations")
-    )
+    dirs = {'audio': "CombinedAudio", 'text': "CombinedText",
+            'v_sub': "CombinedVSub", 'v_act': "CombinedVAct"}
+    train_data = datasets.OMGMulti(
+        modalities, [os.path.join(train_dir, dirs[m]) for m in modalities],
+        os.path.join(train_dir,"Annotations"), truncate=True)
+    test_data = datasets.OMGMulti(
+        modalities, [os.path.join(test_dir, dirs[m]) for m in modalities],
+        os.path.join(test_dir,"Annotations"))
     all_data = train_data.join(test_data)
     print("Done.")
     return train_data, test_data, all_data
@@ -194,8 +189,7 @@ def main(train_data, test_data, args):
     
     # Construct audio-text-visual LSTM model
     dims = {'audio': 990, 'text': 300, 'v_sub': 4096, 'v_act': 4096}
-    modalities = tuple(args.inputs.split(','))
-    model = CombinedLSTM(mods=modalities, dims=(dims[m] for m in modalities),
+    model = CombinedLSTM(mods=args.mods, dims=(dims[m] for m in args.mods),
                          reconstruct=args.recon, use_cuda=args.cuda)
 
     # Setup loss and optimizer
@@ -242,7 +236,7 @@ def main(train_data, test_data, args):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--inputs', type=str, default="audio,text,v_sub,v_act",
+    parser.add_argument('--mods', type=str, default="audio,text,v_sub,v_act",
                         help='comma-separated input modalities (default: all)')
     parser.add_argument('--batch_size', type=int, default=25, metavar='N',
                         help='input batch size for training (default: 25)')
@@ -280,9 +274,11 @@ if __name__ == "__main__":
                         help='path to save models')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
+    args.mods = tuple(args.mods.split(','))
 
     # Load data
-    train_data, test_data, all_data = load_data(args.train_dir, args.test_dir)
+    train_data, test_data, all_data =\
+        load_data(args.mods, args.train_dir, args.test_dir)
 
     # Normalize inputs
     if args.normalize:
