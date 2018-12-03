@@ -81,18 +81,17 @@ def train(loader, model, criterion, optimizer, epoch, args):
     print('Epoch: {}\tLoss: {:2.5f}'.format(epoch, loss))
     return loss
 
-def evaluate(loader, model, criterion, args):
+def evaluate(dataset, model, criterion, args):
     pred = []
-    seq_num, data_num = 0, 0
+    data_num = 0
     loss, corr, ccc = 0.0, 0.0, 0.0
     model.eval()
-    for batch_num, batch in enumerate(loader):
-        batch = list(batch)
-        batch_size = len(batch[-1])
+    for data in dataset:
+        # Collate data into batch of size 1
+        batch = list(datasets.collate_fn([data]))
         # Convert to float
-        if batch_size == 1:
-            for i in range(len(batch)-1):
-                batch[i] = batch[i].float()
+        for i in range(len(batch)-1):
+            batch[i] = batch[i].float()
         # Convert to CUDA
         if args.cuda:
             for i in range(len(batch)-1):
@@ -105,26 +104,23 @@ def evaluate(loader, model, criterion, args):
         output, recon = model(inputs, mask, lengths)
         # Compute loss (only for target)
         if args.diff:
-            batch_loss = criterion(output, diff)
+            loss += criterion(output, diff)
         else:
-            batch_loss = criterion(output, target)
-        loss += batch_loss
-        # Keep track of total number of time-points and sequences
-        seq_num += batch_size
+            loss += criterion(output, target)
+        # Keep track of total number of time-points
         data_num += sum(lengths)
         # Sum predicted differences
         if args.diff:
             output = torch.cumsum(output, dim=1)
         # Store predictions
-        for i in range(0, batch_size):
-            pred_i = output[i,:lengths[i]].view(-1).cpu().numpy()
-            pred.append(pred_i)
+        pred_i = output[0,:lengths[0]].view(-1).cpu().numpy()
+        pred.append(pred_i)
     # Compute CCC of predictions with original unsmoothed data
-    time_ratio = loader.dataset.time_ratio
-    true = loader.dataset.val_orig
+    time_ratio = dataset.time_ratio
+    true = dataset.val_orig
     for i in range(len(pred)):
         # Repeat and pad predictions to match original data length
-        pred[i] = np.repeat(pred[i], time_ratio)[:len(true[i])]
+        pred[i] = np.repeat(pred[i], dataset.time_ratio)[:len(true[i])]
         l_diff = len(true[i]) - len(pred[i])
         if l_diff > 0:
             pred[i] = np.concatenate([pred[i], pred[i][-l_diff:]])
@@ -132,13 +128,36 @@ def evaluate(loader, model, criterion, args):
         ccc += eval_ccc(true[i], pred[i])
     # Average losses and print
     loss /= data_num
-    corr /= seq_num
-    ccc /= seq_num
+    corr /= len(dataset)
+    ccc /= len(dataset)
     print('Evaluation\tLoss: {:2.5f}\tCorr: {:0.3f}\tCCC: {:0.3f}'.\
           format(loss, corr, ccc))
     return pred, loss, corr, ccc
 
-def save_predictions(pred, dataset, path):
+def save_features(dataset, model, path):
+    model.eval()
+    for data, subj, story in zip(dataset, dataset.subjects, dataset.stories):
+        # Collate data into batch of size 1
+        batch = list(datasets.collate_fn([data]))
+        # Convert to float
+        for i in range(len(data)-1):
+            batch[i] = batch[i].float()
+        # Convert to CUDA
+        if args.cuda:
+            for i in range(len(batch)-1):
+                batch[i] = batch[i].cuda()
+        # Unpack batch
+        inputs = dict(zip(args.mods, batch[:-3]))
+        target = batch[-3]
+        mask, lengths = batch[-2:]
+        # Run forward pass.
+        features = model(inputs, mask, lengths, output_features=True)
+        features = features.squeeze(0)
+        # Save features to NPY files
+        fname = "Subject_{}_Story_{}.npy".format(subj, story)
+        np.save(os.path.join(path, fname), features)
+
+def save_predictions(dataset, pred, path):
     for p, subj, story in zip(pred, dataset.subjects, dataset.stories):
         df = pd.DataFrame(p, columns=['valence'])
         fname = "Subject_{}_Story_{}.csv".format(subj, story)
@@ -173,19 +192,6 @@ def main(train_data, test_data, args):
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
     np.random.seed(1)
-
-    # Split training data into chunks
-    train_data.split(args.split)
-    # Batch data using data loaders
-    train_loader = DataLoader(train_data, batch_size=args.batch_size,
-                              shuffle=True, collate_fn=datasets.collate_fn)
-    test_loader = DataLoader(test_data, batch_size=1,
-                             shuffle=False, collate_fn=datasets.collate_fn)    
-    # Create path to save models and predictions
-    if not os.path.exists(args.model_dir):
-        os.makedirs(args.model_dir)
-    if not os.path.exists(args.pred_dir):
-        os.makedirs(args.pred_dir)
     
     # Construct audio-text-visual LSTM model
     dims = {'audio': 990, 'text': 300, 'v_sub': 4096, 'v_act': 4096}
@@ -196,24 +202,47 @@ def main(train_data, test_data, args):
     criterion = nn.MSELoss(reduction='sum')
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
 
-    # Load best model by default
-    if args.load is None:
+    # Load model if specified, or if resume/test flags are set
+    if args.load is not None:
+        load_checkpoint(model, args.load, args.cuda)
+    elif args.test or args.resume:
         model_path = os.path.join(args.model_dir, "best.save")
-    else:
-        model_path = args.load
+        load_checkpoint(model, model_path, args.cuda)
     
     # Evaluate model if test flag is set
     if args.test:
-        load_checkpoint(model, model_path, args.cuda)
         with torch.no_grad():
-            pred, _, _, ccc = evaluate(test_loader, model, criterion, args)
-        save_predictions(pred, test_data, args.pred_dir)
+            pred, _, _, ccc = evaluate(test_data, model, criterion, args)
+        # Create path to save predictions
+        if not os.path.exists(args.pred_dir):
+            os.makedirs(args.pred_dir)
+        save_predictions(test_data, pred, args.pred_dir)
         return ccc
 
-    # Load model if continue flag is set
-    if args.resume:
-        load_checkpoint(model, model_path, args.cuda)
-        
+    # Save features if flag is set
+    if args.features:
+        # Create paths to save features
+        feat_train_dir = os.path.join(args.feat_dir, "training")
+        feat_test_dir = os.path.join(args.feat_dir, "testing")
+        if not os.path.exists(feat_train_dir):
+            os.makedirs(feat_train_dir)
+        if not os.path.exists(feat_test_dir):
+            os.makedirs(feat_test_dir)
+        with torch.no_grad():
+            save_features(train_data, model, feat_train_dir)
+            save_features(test_data, model, feat_test_dir)
+        return
+
+    # Split training data into chunks
+    train_data.split(args.split)
+    # Batch data using data loaders
+    train_loader = DataLoader(train_data, batch_size=args.batch_size,
+                              shuffle=True, collate_fn=datasets.collate_fn)
+
+    # Create path to save models
+    if not os.path.exists(args.model_dir):
+        os.makedirs(args.model_dir)
+    
     # Train and save best model
     best_ccc = -2
     for epoch in range(1, args.epochs + 1):
@@ -222,7 +251,7 @@ def main(train_data, test_data, args):
         if epoch % args.eval_freq == 0:
             with torch.no_grad():
                 pred, loss, corr, ccc =\
-                    evaluate(test_loader, model, criterion, args)
+                    evaluate(test_data, model, criterion, args)
             if ccc > best_ccc:
                 best_ccc = ccc
                 path = os.path.join(args.model_dir, "best.save") 
@@ -260,6 +289,8 @@ if __name__ == "__main__":
                         help='whether to normalize inputs (default: false)')
     parser.add_argument('--resume', action='store_true', default=False,
                         help='resume training loaded model (default: false)')
+    parser.add_argument('--features', action='store_true', default=False,
+                        help='extract features from model (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
                         help='evaluate without training (default: false)')
     parser.add_argument('--test_story', type=str, default="1",
@@ -274,6 +305,8 @@ if __name__ == "__main__":
                         help='path to save models')
     parser.add_argument('--pred_dir', type=str, default="./predictions",
                         help='path to save predictions')
+    parser.add_argument('--feat_dir', type=str, default="./features",
+                        help='path to save extracted features')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
     args.mods = tuple(args.mods.split(','))

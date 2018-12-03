@@ -87,7 +87,8 @@ class CombinedLSTM(nn.Module):
         # Return features before final FC layer if flag is set
         if output_features:
             features = self.dec_target[0](context)
-            return features.view(batch_size, seq_len, -1)
+            features = features.view(batch_size, seq_len, -1) * mask.float()
+            return features
         # Decode the context for each time step
         target = self.dec_target(context).view(batch_size, seq_len, 1)
         # Mask target entries that exceed sequence lengths
