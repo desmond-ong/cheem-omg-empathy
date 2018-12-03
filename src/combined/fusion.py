@@ -146,6 +146,8 @@ if __name__ == "__main__":
                         help='whether to normalize inputs (default: True)')
     parser.add_argument('--test', type=str, default=None,
                         help='path to model to test (default: None)')
+    parser.add_argument('--test_story', type=str, default="1",
+                        help='story to use as test set (optional)')
     parser.add_argument('--train_dir', type=str, default="./data/Training",
                         help='path to train data (default: ./data/Training)')
     parser.add_argument('--test_dir', type=str, default="./data/Validation",
@@ -163,6 +165,9 @@ if __name__ == "__main__":
     # Normalize inputs
     if args.normalize:
         all_data.normalize()
-    
+
+    # Make new train/test split
+    test_data, train_data = all_data.extract_story([args.test_story])
+        
     # Continue to rest of script
     main(train_data, test_data, args)

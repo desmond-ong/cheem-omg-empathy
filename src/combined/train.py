@@ -152,7 +152,7 @@ def save_features(dataset, model, path):
         mask, lengths = batch[-2:]
         # Run forward pass.
         features = model(inputs, mask, lengths, output_features=True)
-        features = features.squeeze(0)
+        features = features.squeeze(0).cpu().numpy()
         # Save features to NPY files
         fname = "Subject_{}_Story_{}.npy".format(subj, story)
         np.save(os.path.join(path, fname), features)
