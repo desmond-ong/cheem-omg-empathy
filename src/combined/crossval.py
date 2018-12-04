@@ -1,9 +1,9 @@
 """Cross-validate by calling training script on different data."""
 
-import os, re, shutil
-import csv
-import train
+import os, re, shutil, csv
 import torch
+
+import train
 
 def main(args):
     # Extract flags that need to be overwritten for train.main

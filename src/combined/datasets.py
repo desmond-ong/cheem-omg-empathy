@@ -189,6 +189,21 @@ class OMGMulti(Dataset):
         remain.split(self.split_ratio)
         return extract, remain
 
+    def augment_subject(self, s, mult=5):
+        """Augment number of samples the specified subjects."""
+        augmented = self.__class__(dataset=self)
+        # Find indices of specified subjects
+        idx = [i for i, subj in enumerate(self.subject) if subj in s]
+        # Augment data for specified subjects
+        augmented.stories += [self.stories[i] for i in idx] * mult
+        augmented.subjects += [self.subjects[i] for i in idx] * mult
+        augmented.val_data += [self.val_data[i] for i in idx] * mult
+        augmented.val_orig += [self.val_orig[i] for i in idx] * mult
+        for n in augmented.in_names:
+            augmented.in_data[n] += [self.in_data[n][i] for i in idx] * mult
+        augmented.split(self.split_ratio)
+        return augmented
+    
 class OMGFusion(OMGMulti):
     """Variant of OMGMulti which returns concatenated input features."""
     def __getitem__(self, i):
