@@ -134,7 +134,7 @@ def evaluate(dataset, model, criterion, args):
           format(loss, corr, ccc))
     return pred, loss, corr, ccc
 
-def save_features(dataset, model, path):
+def save_features(dataset, model, path, args):
     model.eval()
     for data, subj, story in zip(dataset, dataset.subjects, dataset.stories):
         # Collate data into batch of size 1
@@ -211,26 +211,34 @@ def main(train_data, test_data, args):
     
     # Evaluate model if test flag is set
     if args.test:
+        # Create paths to save features
+        pred_train_dir = os.path.join(args.pred_dir, "pred_train")
+        pred_test_dir = os.path.join(args.pred_dir, "pred_test")
+        if not os.path.exists(pred_train_dir):
+            os.makedirs(pred_train_dir)
+        if not os.path.exists(pred_test_dir):
+            os.makedirs(pred_test_dir)
+        # Evaluate on both training and test set
         with torch.no_grad():
-            pred, _, _, ccc = evaluate(test_data, model, criterion, args)
-        # Create path to save predictions
-        if not os.path.exists(args.pred_dir):
-            os.makedirs(args.pred_dir)
-        save_predictions(test_data, pred, args.pred_dir)
-        return ccc
+            pred, _, _, ccc1 = evaluate(train_data, model, criterion, args)
+            save_predictions(train_data, pred, pred_train_dir)
+            pred, _, _, ccc2 = evaluate(test_data, model, criterion, args)
+            save_predictions(test_data, pred, pred_test_dir)
+        return ccc1, ccc2
 
     # Save features if flag is set
     if args.features:
         # Create paths to save features
-        feat_train_dir = os.path.join(args.feat_dir, "training")
-        feat_test_dir = os.path.join(args.feat_dir, "testing")
+        feat_train_dir = os.path.join(args.feat_dir, "feat_train")
+        feat_test_dir = os.path.join(args.feat_dir, "feat_test")
         if not os.path.exists(feat_train_dir):
             os.makedirs(feat_train_dir)
         if not os.path.exists(feat_test_dir):
             os.makedirs(feat_test_dir)
+        # Save features for both training and test set
         with torch.no_grad():
-            save_features(train_data, model, feat_train_dir)
-            save_features(test_data, model, feat_test_dir)
+            save_features(train_data, model, feat_train_dir, args)
+            save_features(test_data, model, feat_test_dir, args)
         return
 
     # Split training data into chunks
@@ -303,9 +311,9 @@ if __name__ == "__main__":
                         help='path to test data (default: ./data/Validation)')
     parser.add_argument('--model_dir', type=str, default="./models",
                         help='path to save models')
-    parser.add_argument('--pred_dir', type=str, default="./predictions",
+    parser.add_argument('--pred_dir', type=str, default="./",
                         help='path to save predictions')
-    parser.add_argument('--feat_dir', type=str, default="./features",
+    parser.add_argument('--feat_dir', type=str, default="./",
                         help='path to save extracted features')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
