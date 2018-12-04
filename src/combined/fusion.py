@@ -52,7 +52,6 @@ def train(train_data, test_data):
     params = list(ParameterGrid(params))
 
     # Cross validate across hyper-parameters
-    print('---')
     best_ccc = -1
     for p in params:
         print("Using parameters:", p)
@@ -115,7 +114,6 @@ def main(train_data, test_data, args):
         # Save best model
         if not os.path.exists(args.model_dir):
             os.makedirs(args.model_dir)
-        model_fname = "best_{}.save".format(",".join(args.in_names))
         joblib.dump(model, os.path.join(args.model_dir, "best.save"))
         # Save predictions of best model
         pred_dir = os.path.join(args.pred_dir, "pred_test")
@@ -125,14 +123,14 @@ def main(train_data, test_data, args):
         # Load and test model on training and test set
         model = joblib.load(args.test)
         print("-Training-")
-        ccc, pred = evaluate(model, train_data)
+        ccc1, pred = evaluate(model, train_data)
         pred_dir = os.path.join(args.pred_dir, "pred_train")
         save_predictions(pred, train_data, pred_dir)
         print("-Testing-")
-        ccc, pred = evaluate(model, test_data)
+        ccc2, pred = evaluate(model, test_data)
         pred_dir = os.path.join(args.pred_dir, "pred_test")
         save_predictions(pred, test_data, pred_dir)
-        return ccc
+        return ccc1, ccc2
     
 if __name__ == "__main__":
     import argparse
@@ -147,10 +145,10 @@ if __name__ == "__main__":
                         help='path to model to test (default: None)')
     parser.add_argument('--test_story', type=str, default="1",
                         help='story to use as test set (optional)')
-    parser.add_argument('--train_dir', type=str, default="./data/Training",
-                        help='path to train data (default: ./data/Training)')
-    parser.add_argument('--test_dir', type=str, default="./data/Validation",
-                        help='path to test data (default: ./data/Validation)')
+    parser.add_argument('--train_dir', type=str, default="data/Training",
+                        help='base folder for training data')
+    parser.add_argument('--test_dir', type=str, default="data/Validation",
+                        help='base folder for testing data')
     parser.add_argument('--model_dir', type=str, default="./fusion_models",
                         help='path to save models')
     parser.add_argument('--pred_dir', type=str, default="./fusion_pred",
@@ -163,6 +161,7 @@ if __name__ == "__main__":
     # Load data
     train_data, test_data, all_data =\
         load_data(args.train_dir, args.test_dir, args.in_dirs, args.in_names)
+    print('---')
     
     # Normalize inputs
     if args.normalize:

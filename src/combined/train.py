@@ -268,6 +268,10 @@ def main(train_data, test_data, args):
             path = os.path.join(args.model_dir,
                                 "epoch_{}.save".format(epoch)) 
             save_checkpoint(model, path)
+
+    # Unsplit training data before returning
+    train_data.split(1)
+    
     return best_ccc
 
 if __name__ == "__main__":

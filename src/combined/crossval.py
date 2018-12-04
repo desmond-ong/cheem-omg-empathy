@@ -9,7 +9,6 @@ def main(args):
     # Extract flags that need to be overwritten for train.main
     test = args.test
     features = args.features
-    model_dir = args.model_dir
     split = args.split
 
     # Set constant flags to be passed on to train.main    
@@ -18,7 +17,7 @@ def main(args):
     args.test_story = None
 
     # Create folder to save predictions on validation sets
-    cv_pred_dir = os.path.join(model_dir, "cv_pred")
+    cv_pred_dir = os.path.join(args.out_dir, "cv_pred")
     if not os.path.exists(cv_pred_dir):
         os.makedirs(cv_pred_dir)
     
@@ -35,47 +34,47 @@ def main(args):
         test_data, train_data = all_data.extract_story([story])
 
         # Create new subdirectory to store models and predictions
-        story_dir = os.path.join(model_dir, "val_on_{}".format(story))
+        story_dir = os.path.join(args.out_dir, "val_on_{}".format(story))
         args.model_dir = story_dir
+        args.pred_dir = story_dir
+        args.feat_dir = story_dir
         
-        if test or features:
-            # Load best model for story if test flag is set
-            args.load = os.path.join(args.model_dir, "best.save")
-        else:
-            # Train model
+        # Train model
+        if not (test or features):
             args.split = split
             args.test, args.features = False, False
-            args.pred_dir = story_dir
             print("---")
             train.main(train_data, test_data, args)
 
+        # Load best model for story
+        args.load = os.path.join(args.model_dir, "best.save")
+            
         # Test model on test and training set
         print("---")
         print("Evaluating best model...")
         print("---")
         args.split = 1
         args.test, args.features = True, False
-        args.pred_dir = story_dir
         ccc1, ccc2 = train.main(train_data, test_data, args)
         train_ccc[story] = ccc1
         test_ccc[story] = ccc2
         
-        # Compile predictions on validation set
-        for fn in os.listdir(args.pred_dir):
+        # Collate predictions on test set
+        pred_test_dir = os.path.join(args.pred_dir, "pred_test")
+        for fn in os.listdir(pred_test_dir):
             if not re.match("^.*\.csv", fn):
                 continue
-            shutil.copy(os.path.join(args.pred_dir, fn), cv_pred_dir)
+            shutil.copy(os.path.join(pred_test_dir, fn), cv_pred_dir)
 
         # Extract features on test and training set
         if features:
             print("---")
             print("Extracting features...")
             args.test, args.features = False, True
-            args.feat_dir = story_dir
             train.main(train_data, test_data, args)
             
     # Print and save results
-    results_path = os.path.join(model_dir, "crossval.csv")
+    results_path = os.path.join(args.out_dir, "crossval.csv")
     results_f = open(results_path, 'wb')
     writer = csv.writer(results_f)
     print("===")
@@ -124,8 +123,8 @@ if __name__ == "__main__":
                         help='path to train data (default: ./data/Training)')
     parser.add_argument('--test_dir', type=str, default="./data/Validation",
                         help='path to test data (default: ./data/Validation)')
-    parser.add_argument('--model_dir', type=str, default="./models",
-                        help='path to save models')
+    parser.add_argument('--out_dir', type=str, default="./cv_models",
+                        help='path to save models, predictions and results')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
     args.mods = args.mods.split(',')
