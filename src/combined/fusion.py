@@ -25,10 +25,8 @@ def eval_ccc(y_true, y_pred):
     ccc = 2*covar / (true_var + pred_var +  (pred_mean-true_mean) ** 2)
     return ccc
 
-def load_data(train_dir, test_dir, in_dirs, in_names=None):
+def load_data(train_dir, test_dir, in_dirs, in_names):
     print("Loading data...")
-    if in_names is None:
-        in_names = [d.lower() for d in in_dirs]
     train_data = datasets.OMGFusion(
         in_names, [os.path.join(train_dir, d) for d in in_dirs],
         os.path.join(train_dir,"Annotations"))
@@ -117,9 +115,10 @@ def main(train_data, test_data, args):
         # Save best model
         if not os.path.exists(args.model_dir):
             os.makedirs(args.model_dir)
+        model_fname = "best_{}.save".format(",".join(args.in_names))
         joblib.dump(model, os.path.join(args.model_dir, "best.save"))
         # Save predictions of best model
-        pred_dir = os.path.join(args.pred_dir, "test_out")
+        pred_dir = os.path.join(args.pred_dir, "pred_test")
         save_predictions(pred, test_data, pred_dir)
         return ccc
     else:
@@ -127,11 +126,11 @@ def main(train_data, test_data, args):
         model = joblib.load(args.test)
         print("-Training-")
         ccc, pred = evaluate(model, train_data)
-        pred_dir = os.path.join(args.pred_dir, "train_out")
+        pred_dir = os.path.join(args.pred_dir, "pred_train")
         save_predictions(pred, train_data, pred_dir)
         print("-Testing-")
         ccc, pred = evaluate(model, test_data)
-        pred_dir = os.path.join(args.pred_dir, "test_out")
+        pred_dir = os.path.join(args.pred_dir, "pred_test")
         save_predictions(pred, test_data, pred_dir)
         return ccc
     
@@ -154,14 +153,17 @@ if __name__ == "__main__":
                         help='path to test data (default: ./data/Validation)')
     parser.add_argument('--model_dir', type=str, default="./fusion_models",
                         help='path to save models')
-    parser.add_argument('--pred_dir', type=str, default="./predictions",
+    parser.add_argument('--pred_dir', type=str, default="./fusion_pred",
                         help='path to save predictions')
     args = parser.parse_args()
-
+    # Construct modality names if not provided
+    if args.in_names is None:
+        args.in_names = [os.path.basename(d).lower() for d in args.in_dirs]
+    
     # Load data
     train_data, test_data, all_data =\
         load_data(args.train_dir, args.test_dir, args.in_dirs, args.in_names)
-
+    
     # Normalize inputs
     if args.normalize:
         all_data.normalize()

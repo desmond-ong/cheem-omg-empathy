@@ -1,6 +1,6 @@
 """Cross-validate by calling training script on different data."""
 
-import os
+import os, re, shutil
 import csv
 import train
 import torch
@@ -16,6 +16,11 @@ def main(args):
     args.resume = False
     args.test_story = None
 
+    # Create folder to save predictions on validation sets
+    cv_pred_dir = os.path.join(model_dir, "cv_pred")
+    if not os.path.exists(cv_pred_dir):
+        os.makedirs(cv_pred_dir)
+    
     # Load all data
     _, _, all_data = train.load_data(args.mods, args.train_dir, args.test_dir)
 
@@ -24,7 +29,6 @@ def main(args):
     for story in sorted(list(set(all_data.stories))):
         print("---")
         print("Story {} as validation".format(story))
-        print("---")
         
         # Split data
         test_data, train_data = all_data.extract_story([story])
@@ -39,7 +43,8 @@ def main(args):
             # Train model
             args.test = False
             args.split = split
-            args.pred_dir = os.path.join(args.model_dir, "train_out")
+            args.pred_dir = os.path.join(args.model_dir, "pred_train")
+            print("---")
             train.main(train_data, test_data, args)
 
         # Test model on test and training set
@@ -48,10 +53,16 @@ def main(args):
         print("---")
         args.test = True
         args.split = 1
-        args.pred_dir = os.path.join(args.model_dir, "train_out")
+        args.pred_dir = os.path.join(args.model_dir, "pred_train")
         train_ccc[story] = train.main(train_data, train_data, args)
-        args.pred_dir = os.path.join(args.model_dir, "test_out")
+        args.pred_dir = os.path.join(args.model_dir, "pred_test")
         test_ccc[story] = train.main(train_data, test_data, args)
+
+        # Compile predictions on validation set
+        for fn in os.listdir(args.pred_dir):
+            if not re.match("^.*\.csv", fn):
+                continue
+            shutil.copy(os.path.join(args.pred_dir, fn), cv_pred_dir)
 
     # Print and save results
     results_path = os.path.join(model_dir, "crossval.csv")
