@@ -105,6 +105,8 @@ def main(args):
     writer.writerow(["Std", train_std, test_std])
     writer.writerow(["M-S", train_mean-train_std, test_mean-test_std])
     results_f.close()
+
+    return test_mean, test_std
         
 if __name__ == "__main__":
     import argparse
