@@ -13,7 +13,7 @@ from sklearn import svm
 from sklearn.model_selection import ParameterGrid
 from sklearn.model_selection import cross_val_score
 
-import datasets
+from datasets import OMGFusion
 
 def eval_ccc(y_true, y_pred):
     """Computes concordance correlation coefficient."""
@@ -27,10 +27,10 @@ def eval_ccc(y_true, y_pred):
 
 def load_data(train_dir, test_dir, in_dirs, in_names):
     print("Loading data...")
-    train_data = datasets.OMGFusion(
+    train_data = OMGFusion(
         in_names, [os.path.join(train_dir, d) for d in in_dirs],
         os.path.join(train_dir,"Annotations"))
-    test_data = datasets.OMGFusion(
+    test_data = OMGFusion(
         in_names, [os.path.join(test_dir, d) for d in in_dirs],
         os.path.join(test_dir,"Annotations"))
     all_data = train_data.join(test_data)    
@@ -143,8 +143,8 @@ if __name__ == "__main__":
                         help='whether to normalize inputs (default: True)')
     parser.add_argument('--test', type=str, default=None,
                         help='path to model to test (default: None)')
-    parser.add_argument('--test_story', type=str, default="1",
-                        help='story to use as test set (optional)')
+    parser.add_argument('--test_set', type=str, default=['1'], nargs='+',
+                        help='stories to use as test set (optional)')
     parser.add_argument('--train_dir', type=str, default="data/Training",
                         help='base folder for training data')
     parser.add_argument('--test_dir', type=str, default="data/Validation",
@@ -168,7 +168,7 @@ if __name__ == "__main__":
         all_data.normalize()
 
     # Make new train/test split
-    test_data, train_data = all_data.extract_story([args.test_story])
+    test_data, train_data = all_data.extract(stories=args.test_set)
         
     # Continue to rest of script
     main(train_data, test_data, args)

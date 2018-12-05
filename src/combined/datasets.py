@@ -164,13 +164,21 @@ class OMGMulti(Dataset):
         joined.split(self.split_ratio)
         return joined
 
-    def extract_story(self, s):
-        """Extract specified story ids to form new train-test split."""
+    def extract(self, stories=None, subjects=None):
+        """Extract specified story/subject ids to form new train-test split."""
         extract = self.__class__(dataset=self)
         remain = self.__class__(dataset=self)
-        # Find indices of specified story
-        idx = [i for i, story in enumerate(self.stories) if story in s]
-        # Extract data for specified story
+        # Default to extracting all stories and subjects
+        if stories is None:
+            stories = set(self.stories)
+        if subjects is None:
+            subjects = set(self.subjects)
+        # Find indices of specified stories and subject
+        idx1 = [i for i, story in enumerate(self.stories) if story in stories]
+        idx2 = [i for i, subj in enumerate(self.subjects) if subj in subjects]
+        # Get intersection of indices
+        idx = [i for i in idx1 if i in idx2]
+        # Extract data
         extract.stories = [self.stories[i] for i in idx]
         extract.subjects = [self.subjects[i] for i in idx]
         extract.val_data = [self.val_data[i] for i in idx]
@@ -189,11 +197,19 @@ class OMGMulti(Dataset):
         remain.split(self.split_ratio)
         return extract, remain
 
-    def augment_subject(self, s, mult=5):
-        """Augment number of samples the specified subjects."""
+    def augment(self, stories=None, subjects=None, mult=5):
+        """Augment number of samples the specified stories or subjects."""
         augmented = self.__class__(dataset=self)
-        # Find indices of specified subjects
-        idx = [i for i, subj in enumerate(self.subject) if subj in s]
+        # Default to augmenting all stories and subjects
+        if stories is None:
+            stories = set(self.stories)
+        if subjects is None:
+            subjects = set(self.subjects)
+        # Find indices of specified stories and subject
+        idx1 = [i for i, story in enumerate(self.stories) if story in stories]
+        idx2 = [i for i, subj in enumerate(self.subjects) if subj in subjects]
+        # Get intersection of indices
+        idx = [i for i in idx1 if i in idx2]
         # Augment data for specified subjects
         augmented.stories += [self.stories[i] for i in idx] * mult
         augmented.subjects += [self.subjects[i] for i in idx] * mult

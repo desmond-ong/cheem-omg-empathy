@@ -291,8 +291,8 @@ if __name__ == "__main__":
                         help='learning rate (default: 1e-5)')
     parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
                         help='evaluate after this many epochs (default: 1)')
-    parser.add_argument('--save_freq', type=int, default=10, metavar='N',
-                        help='save model after this many epochs (default: 10)')
+    parser.add_argument('--save_freq', type=int, default=250, metavar='N',
+                        help='save model after this many epochs (default: 250)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
@@ -307,8 +307,12 @@ if __name__ == "__main__":
                         help='extract features from model (default: false)')
     parser.add_argument('--test', action='store_true', default=False,
                         help='evaluate without training (default: false)')
-    parser.add_argument('--test_story', type=str, default="1",
-                        help='story to use as test set (optional)')
+    parser.add_argument('--test_set', type=str, default=['1'], nargs='+',
+                        help='stories to use as test set (optional)')
+    parser.add_argument('--subjects', type=str, default=None, nargs='+',
+                        help='subjects to train on or emphasize (optional)')
+    parser.add_argument('--augment', type=int, default=None, metavar='N',
+                        help='augmentation ratio for subjects (optional)')
     parser.add_argument('--load', type=str, default=None,
                         help='path to load trained model')
     parser.add_argument('--train_dir', type=str, default="./data/Training",
@@ -328,13 +332,25 @@ if __name__ == "__main__":
     # Load data
     train_data, test_data, all_data =\
         load_data(args.mods, args.train_dir, args.test_dir)
-
+    
     # Normalize inputs
     if args.normalize:
         all_data.normalize()
-    
+        
     # Make new train/test split
-    test_data, train_data = all_data.extract_story([args.test_story])
+    test_data, train_data = all_data.extract(stories=args.test_set)
 
+    # Extract/augment subjects
+    if args.subjects is not None:
+        # Test set should only contain specified subjects
+        test_data, _ = test_data.extract(subjects=args.subjects)
+        if args.augment is not None:
+            # Augment training set if augment flag is set
+            train_data = train_data.augment(subjects=args.subjects,
+                                            mult=args.augment)
+        else:
+            # Otherwise training set should contain only specified subjects
+            train_data, _ = train_data.extract(subjects=args.subjects)
+    
     # Continue to rest of script
     main(train_data, test_data, args)

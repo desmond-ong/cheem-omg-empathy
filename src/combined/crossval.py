@@ -14,7 +14,6 @@ def main(args):
 
     # Set constant flags to be passed on to train.main    
     args.resume = False
-    args.test_story = None
 
     # Create folder to save predictions on validation sets
     cv_pred_dir = os.path.join(args.out_dir, "cv_pred")
@@ -31,7 +30,7 @@ def main(args):
         print("Story {} as validation".format(story))
         
         # Split data
-        test_data, train_data = all_data.extract_story([story])
+        test_data, train_data = all_data.extract(stories=[story])
 
         # Create new subdirectory to store models and predictions
         story_dir = os.path.join(args.out_dir, "val_on_{}".format(story))

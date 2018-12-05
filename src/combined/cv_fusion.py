@@ -54,7 +54,7 @@ def main(args):
                              normalize=args.normalize)
 
         # Split data
-        test_data, train_data = all_data.extract_story([story])        
+        test_data, train_data = all_data.extract(stories=[story])
             
         # Create new subdirectory to store models and predictions for story
         story_dir = os.path.join(args.out_dir, "val_on_{}".format(story))
