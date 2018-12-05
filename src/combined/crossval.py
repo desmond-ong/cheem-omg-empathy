@@ -46,8 +46,12 @@ def main(args):
             print("---")
             train.main(train_data, test_data, args)
 
-        # Load best model for story
-        args.load = os.path.join(args.model_dir, "best.save")
+        # Load model to test and extract features (default to best model)
+        if args.test_epoch is not None:
+            model_fname = "epoch_{}.save".format(args.test_epoch)
+            args.load = os.path.join(args.model_dir, model_fname)
+        else:
+            args.load = os.path.join(args.model_dir, "best.save")
             
         # Test model on test and training set
         print("---")
@@ -137,6 +141,8 @@ if __name__ == "__main__":
                         help='path to test data (default: ./data/Validation)')
     parser.add_argument('--out_dir', type=str, default="./cv_models",
                         help='path to save models, predictions and results')
+    parser.add_argument('--test_epoch', type=int, default=None, metavar='N',
+                        help='epoch to cross-validate (default: best)')
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
     args.mods = args.mods.split(',')
