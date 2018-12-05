@@ -202,12 +202,14 @@ def main(train_data, test_data, args):
     criterion = nn.MSELoss(reduction='sum')
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
 
-    # Load model if specified, or if resume/test flags are set
-    if args.load is not None:
-        load_checkpoint(model, args.load, args.cuda)
-    elif args.test or args.resume:
-        model_path = os.path.join(args.model_dir, "best.save")
-        load_checkpoint(model, model_path, args.cuda)
+    # Load model if resume, test, or feature flags are set
+    if args.test or args.features or args.resume:
+        if args.load is not None:
+            load_checkpoint(model, args.load, args.cuda)
+        else:
+            # Load best model in model dir if unspecified
+            model_path = os.path.join(args.model_dir, "best.save")
+            load_checkpoint(model, model_path, args.cuda)
     
     # Evaluate model if test flag is set
     if args.test:

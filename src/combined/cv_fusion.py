@@ -5,6 +5,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import os, re, shutil, csv
+import numpy as np
 import joblib
 
 import fusion
@@ -90,17 +91,29 @@ def main(args):
     results_path = os.path.join(args.out_dir, "crossval.csv")
     results_f = open(results_path, 'wb')
     writer = csv.writer(results_f)
+
     print("===")
-    print("Val. Story\tTrain CCC\tVal. CCC")
+    print("Val. Story\tTrain CCC\tVal. CCC")    
     writer.writerow(["Val. Story", "Train CCC", "Val. CCC"])
+    
     for story in sorted(train_ccc.keys()):
         print("{}\t\t{:0.3f}\t\t{:0.3f}".\
               format(story, train_ccc[story], test_ccc[story]))
         writer.writerow([story, train_ccc[story], test_ccc[story]])
-    train_mean = sum(train_ccc.values()) / len(train_ccc)
-    test_mean = sum(test_ccc.values()) / len(test_ccc)
-    print("Average\t\t{:0.3f}\t\t{:0.3f}".format(train_mean, test_mean))
-    writer.writerow(["Average", train_mean, test_mean])
+
+    # Compute mean, std, and mean minus std
+    train_mean = np.mean(train_ccc.values())
+    test_mean = np.mean(test_ccc.values())
+    train_std = np.std(train_ccc.values())
+    test_std = np.std(test_ccc.values())
+
+    print("Mean\t\t{:0.3f}\t\t{:0.3f}".format(train_mean, test_mean))
+    print("Std\t\t{:0.3f}\t\t{:0.3f}".format(train_std, test_std))
+    print("M-S\t\t{:0.3f}\t\t{:0.3f}".format(train_mean-train_std,
+                                             test_mean-test_std))
+    writer.writerow(["Mean", train_mean, test_mean])
+    writer.writerow(["Std", train_std, test_std])
+    writer.writerow(["M-S", train_mean-train_std, test_mean-test_std])
     results_f.close()
 
 if __name__ == "__main__":
@@ -112,8 +125,8 @@ if __name__ == "__main__":
                         help='names for input features')
     parser.add_argument('--normalize', action='store_true', default=False,
                         help='whether to normalize inputs (default: True)')
-    parser.add_argument('--test', type=str, default=None,
-                        help='path to model to test (default: None)')
+    parser.add_argument('--test', action='store_true', default=False,
+                        help='whether to evaluate only (default: False)')
     parser.add_argument('--in_dir', type=str, default="./data/All/",
                         help='base folder for all data')
     parser.add_argument('--out_dir', type=str, default="./cv_fusion_out",
