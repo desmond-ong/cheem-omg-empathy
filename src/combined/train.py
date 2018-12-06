@@ -295,9 +295,9 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
                         help='learning rate (default: 1e-5)')
     parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
-                        help='evaluate after this many epochs (default: 1)')
+                        help='evaluate every N epochs (default: 1)')
     parser.add_argument('--save_freq', type=int, default=100, metavar='N',
-                        help='save model after this many epochs (default: 100)')
+                        help='save every N epochs (default: 100)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,

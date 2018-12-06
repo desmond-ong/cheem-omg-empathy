@@ -9,16 +9,16 @@ if __name__ == "__main__":
                         help='comma-separated input modalities (default: all)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
-    parser.add_argument('--features', action='store_true', default=False,
-                        help='extract features from model (default: false)')
     parser.add_argument('--train_dir', type=str, default="./data/Training",
                         help='path to train data (default: ./data/Training)')
     parser.add_argument('--test_dir', type=str, default="./data/Validation",
                         help='path to test data (default: ./data/Validation)')
     parser.add_argument('--out_dir', type=str, default="./cv_models",
                         help='path to save models, predictions and results')
-    parser.add_argument('--test_epoch', type=int, default=None, metavar='N',
-                        help='epoch to cross-validate (default: best)')
+    parser.add_argument('--subjects', type=str, default=None, nargs='+',
+                        help='subjects to train on (default: all)')
+    parser.add_argument('--stories', type=str, default=None, nargs='+',
+                        help='stories to train on (default: all)')
 
     # Default args to be passed on
     parser.add_argument('--diff', action='store_true', default=False,
@@ -47,18 +47,30 @@ if __name__ == "__main__":
 
     # Always test
     args.test = True
+    args.features = False
 
     # Loop over epochs
     means, stds = dict(), dict()
     best_mean = 0
-    min_epochs, max_epochs, step = 200, 2000, 200
-    for e in range(min_epochs, max_epochs, step):
+    min_epochs, max_epochs, step = 100, 2000, 100
+    for e in range(min_epochs, max_epochs+1, step):
         args.test_epoch = e
         means[e], stds[e] = crossval.main(args)
         if means[e] > best_mean:
             best_mean = means[e]
             best_e = e
-    print(means)
-    print(stds)
+
+    # Print mean CCC values
+    print("===")
+    print("Epoch CCC   STD  ")
+    for e in sorted(means.keys()):
+        print("{:5d} {:0.3f} {:0.3f}".format(e, means[e], stds[e]))
+    print("---")
     print("Best epoch: {}".format(best_e))
-    print("Best CCC: {}".format(best_mean))
+    print("Best CCC: {:0.3f}".format(best_mean))
+    print("===")
+
+    # Save results and extract features for best epoch
+    args.test_epoch = best_e
+    args.features = True
+    crossval.main(args)

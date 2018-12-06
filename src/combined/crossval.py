@@ -22,7 +22,10 @@ def main(args):
     
     # Load all data
     _, _, all_data = train.load_data(args.mods, args.train_dir, args.test_dir)
-
+    
+    # Keep only specified stories and subjects
+    all_data, _ = all_data.extract(args.stories, args.subjects)
+    
     # Train and test with each story as the validation set
     train_ccc, test_ccc = dict(), dict()
     for story in sorted(list(set(all_data.stories))):
@@ -122,9 +125,9 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
                         help='learning rate (default: 1e-5)')
     parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
-                        help='evaluate after this many epochs (default: 1)')
-    parser.add_argument('--save_freq', type=int, default=10, metavar='N',
-                        help='save model after this many epochs (default: 10)')
+                        help='evaluate every N epochs (default: 1)')
+    parser.add_argument('--save_freq', type=int, default=100, metavar='N',
+                        help='save every N epochs (default:100)')
     parser.add_argument('--cuda', action='store_true', default=False,
                         help='enables CUDA training (default: false)')
     parser.add_argument('--recon', action='store_true', default=False,
@@ -137,6 +140,10 @@ if __name__ == "__main__":
                         help='extract features from model (default: false)')
     parser.add_argument('--diff', action='store_true', default=False,
                         help='whether to predict differences (default: false)')
+    parser.add_argument('--subjects', type=str, default=None, nargs='+',
+                        help='subjects to train on (default: all)')
+    parser.add_argument('--stories', type=str, default=None, nargs='+',
+                        help='stories to train on (default: all)')
     parser.add_argument('--train_dir', type=str, default="./data/Training",
                         help='path to train data (default: ./data/Training)')
     parser.add_argument('--test_dir', type=str, default="./data/Validation",
