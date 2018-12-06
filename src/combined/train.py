@@ -5,6 +5,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import sys, os, shutil
+import argparse
 
 import pandas as pd
 import numpy as np
@@ -186,7 +187,33 @@ def load_data(modalities, train_dir, test_dir):
     all_data = train_data.join(test_data)
     print("Done.")
     return train_data, test_data, all_data
+
+def preprocess_data(args):
+    # Load data
+    train_data, test_data, all_data =\
+        load_data(args.mods, args.train_dir, args.test_dir)
     
+    # Normalize inputs
+    if args.normalize:
+        all_data.normalize()
+        
+    # Make new train/test split
+    test_data, train_data = all_data.extract(stories=args.test_set)
+
+    # Extract/augment subjects
+    if args.subjects is not None:
+        # Test set should only contain specified subjects
+        test_data, _ = test_data.extract(subjects=args.subjects)
+        if args.augment is not None:
+            # Augment training set if augment flag is set
+            train_data = train_data.augment(subjects=args.subjects,
+                                            mult=args.augment)
+        else:
+            # Otherwise training set should contain only specified subjects
+            train_data, _ = train_data.extract(subjects=args.subjects)
+
+    return train_data, test_data
+
 def main(train_data, test_data, args):
     # Fix random seed
     torch.manual_seed(1)
@@ -281,81 +308,63 @@ def main(train_data, test_data, args):
     
     return best_ccc
 
+# Define parser as global variable so it can be re-used in imports
+parser = argparse.ArgumentParser(conflict_handler='resolve')
+parser.add_argument('--mods', type=str, default="audio,text,v_sub,v_act",
+                    help='comma-separated input modalities (default: all)')
+parser.add_argument('--batch_size', type=int, default=25, metavar='N',
+                    help='input batch size for training (default: 25)')
+parser.add_argument('--split', type=int, default=5, metavar='N',
+                    help='sections to split each video into (default: 5)')
+parser.add_argument('--epochs', type=int, default=1000, metavar='N',
+                    help='number of epochs to train (default: 1000)')
+parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
+                    help='learning rate (default: 1e-5)')
+parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
+                    help='evaluate every N epochs (default: 1)')
+parser.add_argument('--save_freq', type=int, default=100, metavar='N',
+                    help='save every N epochs (default: 100)')
+parser.add_argument('--cuda', action='store_true', default=False,
+                    help='enables CUDA training (default: false)')
+parser.add_argument('--diff', action='store_true', default=False,
+                    help='whether to predict differences (default: false)')
+parser.add_argument('--recon', action='store_true', default=False,
+                    help='whether to reconstruct inputs (default: false)')
+parser.add_argument('--normalize', action='store_true', default=False,
+                    help='whether to normalize inputs (default: false)')
+parser.add_argument('--resume', action='store_true', default=False,
+                    help='resume training loaded model (default: false)')
+parser.add_argument('--features', action='store_true', default=False,
+                    help='extract features from model (default: false)')
+parser.add_argument('--test', action='store_true', default=False,
+                    help='evaluate without training (default: false)')
+parser.add_argument('--test_set', type=str, default=['1'], nargs='+',
+                    help='stories to use as test set (optional)')
+parser.add_argument('--subjects', type=str, default=None, nargs='+',
+                    help='subjects to train on or emphasize (optional)')
+parser.add_argument('--augment', type=int, default=None, metavar='N',
+                    help='augmentation ratio for subjects (optional)')
+parser.add_argument('--load', type=str, default=None,
+                    help='path to load trained model')
+parser.add_argument('--train_dir', type=str, default="./data/Training",
+                    help='path to train data (default: ./data/Training)')
+parser.add_argument('--test_dir', type=str, default="./data/Validation",
+                    help='path to test data (default: ./data/Validation)')
+parser.add_argument('--model_dir', type=str, default="./models",
+                    help='path to save models')
+parser.add_argument('--pred_dir', type=str, default="./",
+                    help='path to save predictions')
+parser.add_argument('--feat_dir', type=str, default="./",
+                    help='path to save extracted features')
+
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--mods', type=str, default="audio,text,v_sub,v_act",
-                        help='comma-separated input modalities (default: all)')
-    parser.add_argument('--batch_size', type=int, default=25, metavar='N',
-                        help='input batch size for training (default: 25)')
-    parser.add_argument('--split', type=int, default=5, metavar='N',
-                        help='sections to split each video into (default: 5)')
-    parser.add_argument('--epochs', type=int, default=1000, metavar='N',
-                        help='number of epochs to train (default: 1000)')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='LR',
-                        help='learning rate (default: 1e-5)')
-    parser.add_argument('--eval_freq', type=int, default=1, metavar='N',
-                        help='evaluate every N epochs (default: 1)')
-    parser.add_argument('--save_freq', type=int, default=100, metavar='N',
-                        help='save every N epochs (default: 100)')
-    parser.add_argument('--cuda', action='store_true', default=False,
-                        help='enables CUDA training (default: false)')
-    parser.add_argument('--diff', action='store_true', default=False,
-                        help='whether to predict differences (default: false)')
-    parser.add_argument('--recon', action='store_true', default=False,
-                        help='whether to reconstruct inputs (default: false)')
-    parser.add_argument('--normalize', action='store_true', default=False,
-                        help='whether to normalize inputs (default: false)')
-    parser.add_argument('--resume', action='store_true', default=False,
-                        help='resume training loaded model (default: false)')
-    parser.add_argument('--features', action='store_true', default=False,
-                        help='extract features from model (default: false)')
-    parser.add_argument('--test', action='store_true', default=False,
-                        help='evaluate without training (default: false)')
-    parser.add_argument('--test_set', type=str, default=['1'], nargs='+',
-                        help='stories to use as test set (optional)')
-    parser.add_argument('--subjects', type=str, default=None, nargs='+',
-                        help='subjects to train on or emphasize (optional)')
-    parser.add_argument('--augment', type=int, default=None, metavar='N',
-                        help='augmentation ratio for subjects (optional)')
-    parser.add_argument('--load', type=str, default=None,
-                        help='path to load trained model')
-    parser.add_argument('--train_dir', type=str, default="./data/Training",
-                        help='path to train data (default: ./data/Training)')
-    parser.add_argument('--test_dir', type=str, default="./data/Validation",
-                        help='path to test data (default: ./data/Validation)')
-    parser.add_argument('--model_dir', type=str, default="./models",
-                        help='path to save models')
-    parser.add_argument('--pred_dir', type=str, default="./",
-                        help='path to save predictions')
-    parser.add_argument('--feat_dir', type=str, default="./",
-                        help='path to save extracted features')
+    # Parse command line args
     args = parser.parse_args()
     args.cuda = args.cuda and torch.cuda.is_available()
     args.mods = tuple(args.mods.split(','))
 
-    # Load data
-    train_data, test_data, all_data =\
-        load_data(args.mods, args.train_dir, args.test_dir)
-    
-    # Normalize inputs
-    if args.normalize:
-        all_data.normalize()
-        
-    # Make new train/test split
-    test_data, train_data = all_data.extract(stories=args.test_set)
-
-    # Extract/augment subjects
-    if args.subjects is not None:
-        # Test set should only contain specified subjects
-        test_data, _ = test_data.extract(subjects=args.subjects)
-        if args.augment is not None:
-            # Augment training set if augment flag is set
-            train_data = train_data.augment(subjects=args.subjects,
-                                            mult=args.augment)
-        else:
-            # Otherwise training set should contain only specified subjects
-            train_data, _ = train_data.extract(subjects=args.subjects)
+    # Load and preprocess data
+    train_data, test_data = preprocess_data(args)
     
     # Continue to rest of script
     main(train_data, test_data, args)

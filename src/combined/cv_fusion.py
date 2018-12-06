@@ -43,6 +43,9 @@ def main(args):
         # Copy features from crossval.py output directories
         for cv_dir, in_name in zip(args.cv_dirs, args.in_names):
             story_dir = os.path.join(cv_dir, "val_on_{}".format(story))
+            if not os.path.exists(story_dir):
+                # Use the same features for all validation stories
+                story_dir = cv_dir
             copy_all(os.path.join(story_dir, "feat_train"),
                      os.path.join(args.in_dir, in_name), "^.*\.npy")
             copy_all(os.path.join(story_dir, "feat_test"),
