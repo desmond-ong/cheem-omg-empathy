@@ -36,10 +36,21 @@ def ccc(y_true, y_pred):
 
 def orderFiles (folder):
     dataList = os.listdir(folder)
-
+    filter_list(dataList)
     dataList = sorted(sorted(dataList, key=lambda x: int(x.split(".")[0].split("_")[3])), key=lambda x: int(x.split(".")[0].split("_")[1]))
 
+    return dataList
 
+
+def filter_list(dataList):
+    '''
+    Filter out invalid files (sn)
+    :param dataList:
+    :return:
+    '''
+    for fname in dataList:
+        if fname.startswith(".") or fname.startswith("#"):
+            dataList.remove(fname)
     return dataList
 
 
