@@ -33,7 +33,8 @@ if __name__ == "__main__":
         train.load_data(args.mods, args.train_dir, args.test_dir)
     if args.normalize:
         all_data.normalize()
-    test_data, train_data = all_data.extract(stories=args.test_set)
+    if args.test_set is not None:
+        test_data, train_data = all_data.extract(stories=args.test_set)
     
     # Fine-tune model for each subject
     subjects = list(sorted(list(set(all_data.subjects))))
@@ -62,7 +63,7 @@ if __name__ == "__main__":
             train.main(train_data_s, test_data_s, args)
 
         # Load and evaluate model from last epoch
-        args.load = os.path.join(subj_dir, "last.save")
+        args.load = os.path.join(subj_dir, "best.save")
         args.test, args.resume = True, False
         train_ccc, test_ccc = train.main(train_data_s, test_data_s, args)
 
