@@ -2,7 +2,7 @@
 
 Train a VGG-LSTM for predicting empathy on the OMG-Empathy Prediction Dataset
 
-## Frames and Faces from OMG-Video dataset
+## Frames and Faces from OMG-Empathy dataset
 
 ```bash
 pip install face_recognition
