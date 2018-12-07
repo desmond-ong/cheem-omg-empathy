@@ -1,5 +1,5 @@
 
-# OMG Empathy Challenge: A\*STAR AI Submission
+# Multimodal models for the OMG Empathy Challenge
 
 This is a guide to training and cross-validating our multi-modal feature-level fusion models. An interactive Jupyter Notebook version can be found at README.ipynb.
 
