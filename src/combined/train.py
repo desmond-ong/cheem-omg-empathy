@@ -198,7 +198,8 @@ def preprocess_data(args):
         all_data.normalize()
         
     # Make new train/test split
-    test_data, train_data = all_data.extract(stories=args.test_set)
+    if args.test_set is not None:
+        test_data, train_data = all_data.extract(stories=args.test_set)
 
     # Extract/augment subjects
     if args.subjects is not None:
@@ -338,7 +339,7 @@ parser.add_argument('--features', action='store_true', default=False,
                     help='extract features from model (default: false)')
 parser.add_argument('--test', action='store_true', default=False,
                     help='evaluate without training (default: false)')
-parser.add_argument('--test_set', type=int, default=[1], nargs='+',
+parser.add_argument('--test_set', type=int, default=None, nargs='+',
                     help='stories to use as test set (optional)')
 parser.add_argument('--subjects', type=int, default=None, nargs='+',
                     help='subjects to train on or emphasize (optional)')
