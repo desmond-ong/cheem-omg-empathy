@@ -338,9 +338,9 @@ parser.add_argument('--features', action='store_true', default=False,
                     help='extract features from model (default: false)')
 parser.add_argument('--test', action='store_true', default=False,
                     help='evaluate without training (default: false)')
-parser.add_argument('--test_set', type=str, default=['1'], nargs='+',
+parser.add_argument('--test_set', type=int, default=[1], nargs='+',
                     help='stories to use as test set (optional)')
-parser.add_argument('--subjects', type=str, default=None, nargs='+',
+parser.add_argument('--subjects', type=int, default=None, nargs='+',
                     help='subjects to train on or emphasize (optional)')
 parser.add_argument('--augment', type=int, default=None, metavar='N',
                     help='augmentation ratio for subjects (optional)')

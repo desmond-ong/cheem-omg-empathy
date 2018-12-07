@@ -115,9 +115,9 @@ def main(args):
 
 # Load parser from train.py and add options
 parser = train.parser
-parser.add_argument('--subjects', type=str, default=None, nargs='+',
+parser.add_argument('--subjects', type=int, default=None, nargs='+',
                     help='subjects to train on (default: all)')
-parser.add_argument('--stories', type=str, default=None, nargs='+',
+parser.add_argument('--stories', type=int, default=None, nargs='+',
                     help='stories to train on (default: all)')
 parser.add_argument('--out_dir', type=str, default="./cv_models",
                     help='path to save models, predictions and results')

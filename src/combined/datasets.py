@@ -60,8 +60,8 @@ class OMGMulti(Dataset):
         for fn in sorted(os.listdir(val_path)):
             match = re.match(pattern, fn)
             if match:
-                self.subjects.append(match.group(1))
-                self.stories.append(match.group(2))
+                self.subjects.append(int(match.group(1)))
+                self.stories.append(int(match.group(2)))
         
         # Load data from files
         self.val_data = []

@@ -143,7 +143,7 @@ if __name__ == "__main__":
                         help='whether to normalize inputs (default: True)')
     parser.add_argument('--test', type=str, default=None,
                         help='path to model to test (default: None)')
-    parser.add_argument('--test_set', type=str, default=['1'], nargs='+',
+    parser.add_argument('--test_set', type=int, default=[1], nargs='+',
                         help='stories to use as test set (optional)')
     parser.add_argument('--train_dir', type=str, default="data/Training",
                         help='base folder for training data')
