@@ -1,4 +1,4 @@
-# OMG Empathy Challenge : A*STAR AI Submission
+# OMG Empathy Challenge: A*STAR AI Submission
 Repository for the A*AI Team's submission to the OMG-Empathy Challenge 2019
 
 `audio` contains audio feature extraction code
@@ -6,4 +6,4 @@ Repository for the A*AI Team's submission to the OMG-Empathy Challenge 2019
 `visual` contains visual feature extraction code and the visual-only model
 `multimodal` contains the multimodal model code
 
-Requires PyTorch and scikit-learn. See READMEs in each sub-folder for more details on usage.
+Requires PyTorch and scikit-learn. See read-mes in each sub-folder for more details on usage.
