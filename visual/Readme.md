@@ -21,6 +21,6 @@ We use the pre-trained VGG face model to extract 4096-d vector for the subject a
 
 ## Training a VGG-LSTM Model on the OMG-Empathy dataset
 
-We use train.py to train our VGG-LSTM model using the 1 second average subject-features (extracted in 4. above) and test.py to calculate the final CCC and generate predictions.
+We use train.py (batchsize=25, seq_len = 150) to train our VGG-LSTM model using the 1 second average subject-features (extracted in 4. above) and test.py (batchsize=1, seq_len = 60) to calculate the final CCC and generate predictions.
 
 Please make sure to update paths to directories as appropriate.
