@@ -49,21 +49,10 @@ def train(loader, model, criterion, optimizer, epoch, args):
         inputs = dict(zip(args.mods, batch[:-3]))
         target = batch[-3]
         mask, lengths = batch[-2:]
-        # Compute differences for target
-        if args.diff:
-            target = target[:,1:] - target[:,:-1]
-            target = torch.cat([torch.zeros(batch_size, 1, 1), target], dim=1)
         # Run forward pass.
-        output, recon = model(inputs, mask, lengths)
+        output = model(inputs, mask, lengths)
         # Compute loss and gradients
         batch_loss = criterion(output, target)
-        # Compute reconstruction loss if recon flag is set
-        if args.recon:
-            for m in model.mods:
-                # MSE loss between reconstruction at t and input at t+1
-                m_loss = criterion(recon[m][:,:-1], inputs[m][:,1:])
-                # Divide loss by modality dims and number to keep balance
-                batch_loss += 0.05*m_loss / (model.dims[m] * len(model.mods))
         # Accumulate total loss for epoch
         loss += batch_loss
         # Average over number of non-padding datapoints before stepping
@@ -102,17 +91,11 @@ def evaluate(dataset, model, criterion, args):
         target = batch[-3]
         mask, lengths = batch[-2:]
         # Run forward pass.
-        output, recon = model(inputs, mask, lengths)
-        # Compute loss (only for target)
-        if args.diff:
-            loss += criterion(output, diff)
-        else:
-            loss += criterion(output, target)
+        output = model(inputs, mask, lengths)
+        # Compute loss
+        loss += criterion(output, target)
         # Keep track of total number of time-points
         data_num += sum(lengths)
-        # Sum predicted differences
-        if args.diff:
-            output = torch.cumsum(output, dim=1)
         # Store predictions
         pred_i = output[0,:lengths[0]].view(-1).cpu().numpy()
         pred.append(pred_i)
@@ -224,7 +207,7 @@ def main(train_data, test_data, args):
     # Construct audio-text-visual LSTM model
     dims = {'audio': 990, 'text': 300, 'v_sub': 4096, 'v_act': 4096}
     model = CombinedLSTM(mods=args.mods, dims=(dims[m] for m in args.mods),
-                         reconstruct=args.recon, use_cuda=args.cuda)
+                         use_cuda=args.cuda)
 
     # Setup loss and optimizer
     criterion = nn.MSELoss(reduction='sum')
@@ -327,10 +310,6 @@ parser.add_argument('--save_freq', type=int, default=100, metavar='N',
                     help='save every N epochs (default: 100)')
 parser.add_argument('--cuda', action='store_true', default=False,
                     help='enables CUDA training (default: false)')
-parser.add_argument('--diff', action='store_true', default=False,
-                    help='whether to predict differences (default: false)')
-parser.add_argument('--recon', action='store_true', default=False,
-                    help='whether to reconstruct inputs (default: false)')
 parser.add_argument('--normalize', action='store_true', default=False,
                     help='whether to normalize inputs (default: false)')
 parser.add_argument('--resume', action='store_true', default=False,

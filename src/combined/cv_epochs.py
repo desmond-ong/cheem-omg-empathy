@@ -1,10 +1,18 @@
+"""Cross-validate models across epochs, assuming models are already saved."""
+
 import argparse
 import torch
 
 import crossval
 
-# Load parser from crossval.py
+# Load parser from crossval.py and add options
 parser = crossval.parser
+parser.add_argument('--epoch_min', type=int, default=100,
+                    help="Minimum epoch to evaluate.")
+parser.add_argument('--epoch_max', type=int, default=2000,
+                    help="Maximum epoch to evaluate.")
+parser.add_argument('--epoch_step', type=int, default=100,
+                    help="Step size when iterating over epochs.")
 
 # Suppress help for overridden options
 parser.add_argument('--test', help=argparse.SUPPRESS)
@@ -23,8 +31,7 @@ if __name__ == "__main__":
     # Loop over epochs
     means, stds = dict(), dict()
     best_mean = 0
-    min_epochs, max_epochs, step = 100, 2000, 100
-    for e in range(min_epochs, max_epochs+1, step):
+    for e in range(args.epoch_min, args.epoch_max+1, args.epoch_step):
         args.test_epoch = e
         means[e], stds[e] = crossval.main(args)
         if means[e] > best_mean:

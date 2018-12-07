@@ -11,7 +11,6 @@ import numpy as np
 
 from sklearn import svm
 from sklearn.model_selection import ParameterGrid
-from sklearn.model_selection import cross_val_score
 
 from datasets import OMGFusion
 
@@ -143,7 +142,7 @@ if __name__ == "__main__":
                         help='whether to normalize inputs (default: True)')
     parser.add_argument('--test', type=str, default=None,
                         help='path to model to test (default: None)')
-    parser.add_argument('--test_set', type=int, default=[1], nargs='+',
+    parser.add_argument('--test_set', type=int, default=None, nargs='+',
                         help='stories to use as test set (optional)')
     parser.add_argument('--train_dir', type=str, default="data/Training",
                         help='base folder for training data')
@@ -168,7 +167,8 @@ if __name__ == "__main__":
         all_data.normalize()
 
     # Make new train/test split
-    test_data, train_data = all_data.extract(stories=args.test_set)
+    if args.test_set is not None:
+        test_data, train_data = all_data.extract(stories=args.test_set)
         
     # Continue to rest of script
     main(train_data, test_data, args)

@@ -62,7 +62,7 @@ if __name__ == "__main__":
             args.test, args.resume = False, True
             train.main(train_data_s, test_data_s, args)
 
-        # Load and evaluate model from last epoch
+        # Load and evaluate model from best epoch
         args.load = os.path.join(subj_dir, "best.save")
         args.test, args.resume = True, False
         train_ccc, test_ccc = train.main(train_data_s, test_data_s, args)
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         # Append CCC on test set
         subj_ccc.append(test_ccc)
 
-    # Print CCC values on last epoch for each subject
+    # Print CCC values on best epoch for each subject
     print("===")
     print("Subj CCC ")
     for s, ccc in zip(subjects, subj_ccc):

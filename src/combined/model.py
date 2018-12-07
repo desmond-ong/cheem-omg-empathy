@@ -11,7 +11,7 @@ class CombinedLSTM(nn.Module):
     
     def __init__(self, mods=('audio', 'text', 'v_sub', 'v_act'),
                  dims=(990, 300, 4096, 4096), embed_dim=128, hidden_dim=512,
-                 n_layers=1, attn_len=3, reconstruct=False, use_cuda=False):
+                 n_layers=1, attn_len=3, use_cuda=False):
         super(CombinedLSTM, self).__init__()
         self.mods = mods
         self.n_mods = len(mods)
@@ -20,7 +20,6 @@ class CombinedLSTM(nn.Module):
         self.hidden_dim = hidden_dim
         self.n_layers = n_layers
         self.attn_len = attn_len
-        self.reconstruct = reconstruct
         
         # Create raw-to-embed FC+Dropout layer for each modality
         self.embed = dict()
@@ -42,14 +41,6 @@ class CombinedLSTM(nn.Module):
         self.dec_target = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
                                         nn.ReLU(),
                                         nn.Linear(embed_dim, 1))
-        # Decoder networks to reconstruct each modality
-        if self.reconstruct:
-            self.dec = dict()
-            for m in self.mods:
-                self.dec[m] = nn.Sequential(nn.Linear(hidden_dim, embed_dim),
-                                            nn.ReLU(),
-                                            nn.Linear(embed_dim, self.dims[m]))
-                self.add_module('dec_{}'.format(m), self.dec[m])
         # Enable CUDA if flag is set
         self.use_cuda = use_cuda
         if self.use_cuda:
@@ -93,15 +84,7 @@ class CombinedLSTM(nn.Module):
         target = self.dec_target(context).view(batch_size, seq_len, 1)
         # Mask target entries that exceed sequence lengths
         target = target * mask.float()
-        # Reconstruct each modality if flag is set
-        if self.reconstruct:
-            recon = dict()
-            for m in self.mods:
-                recon[m] = self.dec[m](context).view(batch_size, seq_len, -1)
-                recon[m] = recon[m] * mask.float()
-            return target, recon
-        else:
-            return target, None
+        return target
 
     def pad_shift(self, x, shift):
         """Shift 3D tensor forwards in time with zero padding."""
@@ -143,8 +126,7 @@ if __name__ == "__main__":
     inputs = {'audio': audio, 'text': text, 'v_sub': v_sub, 'v_act': v_act}
     for m in inputs.keys():
         inputs[m] = torch.tensor(inputs[m]).float()
-    out, _ = model(inputs, mask, lengths)
-    out = out.view(-1)
+    out = model(inputs, mask, lengths).view(-1)
     print("Predicted valences:")
     for o in out:
         print("{:+0.3f}".format(o.item()))
