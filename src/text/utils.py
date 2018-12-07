@@ -38,7 +38,7 @@ def load_subtitles(input_file):
 
     subtitles = []
     flag = 0  # 0: start new, 1: time, 2: text
-    with open(input_file, 'r') as reader:
+    with open(input_file, 'r', encoding="utf-8") as reader:
         for line in reader.readlines():
             line = line.strip()
             if line == "":
@@ -69,17 +69,6 @@ def load_annotations(csv_file):
     for score in data['valence']:
         scores.append(score)
     return scores
-
-
-
-
-
-
-
-
-
-
-
 
 def get_number(text):
     if "," in text:

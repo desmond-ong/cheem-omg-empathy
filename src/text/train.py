@@ -16,7 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 import sys
 sys.path.append("/raid/omgempathy/")  # path to the main dir
-from src.text_based_submit import utils
+from src.text import utils
 
 
 class LSTMUtterChunk(nn.Module):

@@ -9,8 +9,8 @@ import re
 import sys
 sys.path.append("/raid/omgempathy/")  # path to the main dir
 from src.sample import calculateCCC
-from src.text_based_submit import utils
-from src.text_based_submit.train import LSTMUtterChunk
+from src.text import utils
+from src.text.train import LSTMUtterChunk
 
 
 pattern = ".*(model_.*)\.pt"
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     en_stopwords = set(stopwords.words('english'))
 
     parser = argparse.ArgumentParser("Model Evaluation")
-    parser.add_argument("-m", "--model", help="Saved model's path, e.g., d",
+    parser.add_argument("-m", "--model", help="Saved model's path",
                         required=True)
     parser.add_argument('-d', '--diff', help="Predict differences?: False: No (actuall value), True: Yes", default=True,
                         type=bool)

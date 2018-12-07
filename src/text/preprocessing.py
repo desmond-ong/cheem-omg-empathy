@@ -5,11 +5,14 @@ preprocessing steps
 import os
 import numpy as np
 import json
-from src.text_based_submit import utils
+from gensim.scripts.glove2word2vec import glove2word2vec
+# import sys
+# sys.path.append("/raid/omgempathy/")
+import utils
 
 root_dir = "data/"
 diff = 1e-6
-
+import argparse
 
 class Utterance():
     def __init__(self, id, start_time, end_time, start_frame, end_frame, text, scores, average):
@@ -141,33 +144,59 @@ def compute_score_difference(data_source, scores_dirname, difference_dirname):
 def map_transcripts_to_scores():
     sources_with_annotations = ["Training", "Validation"]
     for data_source in sources_with_annotations:
-        transcript_scores_mapping(data_source, youtube_transcript_dirname, annotation_dirname, output_dirname)
+        transcript_scores_mapping(data_source, youtube_transcript_dirname, annotation_dirname, output_actual_value_dirname)
 
 
 def transcripts_to_json_no_scores():
-    transcript_to_json("Testing", youtube_transcript_dirname, output_dirname)
+    transcript_to_json("Testing", youtube_transcript_dirname, output_actual_value_dirname)
 
 
 def scores_to_differences():
-    scores_dirname = "transcripts_with_scores"
-    difference_dirname = "transcripts_with_scores_difference"
+    scores_dirname = output_actual_value_dirname
+    difference_dirname = output_difference_dirname
     compute_score_difference("Training", scores_dirname, difference_dirname)
     compute_score_difference("Validation", scores_dirname, difference_dirname)
 
 
 if __name__ == "__main__":
-    # generate json files: mapping youtube transcripts (utterances) with annotations (Training, Validation)
-    youtube_transcript_dirname = "Transcripts_Youtube"
-    annotation_dirname = "Annotations"
-    output_dirname = "transcripts_with_scores"
+    parser = argparse.ArgumentParser("Preprocessing")
+    parser.add_argument("option", default=1, type=int, help="Perform preprocessing:\n"
+                                                            "0. Convert glove word embeddings file into word2vec format"
+                                                            "1. Input for training and validation: map the transcripts (.srt) with annotations scores\n"
+                                                            "2. Input for training and validation: Compute scores changes for consecutive utterances\n"
+                                                            "3. Input for testing: create input for the testing from the transcripts (.srt)")
+    parser.add_argument("--transcript", default="Transcripts_Youtube", help="Transcripts dir name (text with timing, format as .srt)", required=False)
+    parser.add_argument("--annotation", default="Annotations", help="Dir name for annotation", required=False)
+    parser.add_argument("--output_score", default="transcripts_with_scores", help="Dir name for output with scores (actual value)", required=False)
+    parser.add_argument("--output_difference", default="transcripts_with_scores_difference", help="Dir name for output with scores (differences)", required=False)
+    parser.add_argument("--glove", default="glove/glove.840B.300d.txt", help="Original glove embeddings file")
+    parser.add_argument("-w", "--word2vec_output", default="glove/glove.840B.300d.txt.word2vec", help="Word2Vec format output")
 
-    # map the transcripts with annotations scores
-    # map_transcripts_to_scores()
 
-    # generate json files: when annotations are not available (Testing)
-    # transcripts_to_json_no_scores()
+    args = parser.parse_args()
+    option = args.option
+    youtube_transcript_dirname = args.transcript
+    annotation_dirname = args.annotation
+    output_actual_value_dirname = args.output_score
+    output_difference_dirname = args.output_difference
+    if option == 0:
+        print("Converting glove embeddings to word2vec format. Output: {}".format(args['word2vec_output']))
+        glove2word2vec(args['glove'], args['word2vec_output'])
+    elif option == 1:
+        print("Preparing input for training and validation: map the transcripts (.srt) with annotations scores")
+        # generate json files: mapping youtube transcripts (utterances) with annotations (Training, Validation)
+        # map the transcripts with annotations scores
+        map_transcripts_to_scores()
+    elif option == 2:
+        print("Preparing input for training and validation: Compute scores changes for consecutive utterances")
+        scores_to_differences()
+    elif option == 3:
+        print("Preparing input for testing: create input for the testing from the transcripts (.srt)")
+        transcripts_to_json_no_scores()
+    else:
+        print("Invalid option!")
 
     # generate json files: scores are the changes of continuous utterances' averages
-    # scores_to_differences()
+
 
 
