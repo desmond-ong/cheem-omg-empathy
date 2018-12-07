@@ -24,6 +24,3 @@ We use the pre-trained VGG face model to extract 4096-d vector for the subject a
 We use train.py to train our VGG-LSTM model using the 1 second average subject-features (extracted in 4. above) and test.py to calculate the final CCC and generate predictions.
 
 Please make sure to update paths to directories as appropriate.
-
-## License
-[MIT](https://choosealicense.com/licenses/mit/)
