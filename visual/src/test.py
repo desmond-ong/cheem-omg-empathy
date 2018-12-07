@@ -1,3 +1,5 @@
+## Script for generating predictions using trained VGG_LSTM models over the Testing data ##
+
 import torch
 import os
 import sys
@@ -142,25 +144,5 @@ gt_target_dir = os.path.join(base_dir,'Annotations')
 pred_output_dir = pred_output_file
 meanccc = calculateCCC(gt_target_dir, pred_output_dir)
 
-"""
-
-### For calculating Avg CCC over Cross Validated Models ##
-
-
-"""
-results_path = os.path.join(base_dir,'Visual_Results', 'crossval.csv')
-results_f = open(results_path, 'wb')
-writer = csv.writer(results_f)
-print("===")
-print("Val. Story\tVal CCC")
-writer.writerow(["Val. Story", "Val CCC"])
-for story in range(len(val_stories)):
-    print("{}\t\t{:0.3f}". \
-          format(val_stories[story], val_ccc[story]))
-    writer.writerow([val_stories[story],val_ccc[story]])
-test_mean = sum(val_ccc) / len(val_ccc)
-print("Average\t\t{:0.3f}".format(test_mean))
-writer.writerow(["Average",test_mean])
-results_f.close()
 """
 
