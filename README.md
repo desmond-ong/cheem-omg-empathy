@@ -10,3 +10,5 @@ Requires PyTorch and scikit-learn. See read-mes in each sub-folder for more deta
 
 
 The saved model files that we used for our submission to the challenge are listed [here](https://www.dropbox.com/sh/al6fislp1xknqh8/AADzgxj0zfh22LX_RH06yq_Da?dl=0).
+
+Detailed information about our models and implementation can be found in our paper - [A Multimodal LSTM for Predicting Listener Empathic Responses Over Time](https://arxiv.org/abs/1812.04891)
