@@ -6,7 +6,6 @@ from scipy.stats import pearsonr
 import numpy
 import pandas
 
-
 def mse(y_true, y_pred):
     from sklearn.metrics import mean_squared_error
     return mean_squared_error(y_true,y_pred)
@@ -55,34 +54,22 @@ def filter_list(dataList):
 
 
 def calculateCCC(validationFolder, modelOutputFolder):
-
     validationFiles = orderFiles(validationFolder)
     modelOutputfolder = orderFiles(modelOutputFolder)
-
-
     cccList = []
-
     subjectCCC = []
-
     currentSubject = validationFiles[0].split(".")[0].split("_")[1]
     for fileIndex in range (len(validationFiles)):
-
-
-
-        dataY = pandas.read_csv(validationFolder+"/"+validationFiles[fileIndex], header=0, sep=",")
-
-        dataYPred = pandas.read_csv(modelOutputFolder+"/"+modelOutputfolder[fileIndex], header=0, sep=",")
-
+        dataY = pandas.read_csv(validationFolder+"/"+
+                                validationFiles[fileIndex],
+                                header=0, sep=",")
+        dataYPred = pandas.read_csv(modelOutputFolder+"/"+
+                                    modelOutputfolder[fileIndex],
+                                    header=0, sep=",")
         dataYValence = dataY["valence"]
-
         dataYPredValence = dataYPred["valence"]
-
         valenceCCC, vcor = ccc(dataYValence, dataYPredValence)
-
-
         subjectNumber = validationFiles[fileIndex].split(".")[0].split("_")[1]
-
-
         if subjectNumber == currentSubject:
             subjectCCC.append(valenceCCC)
         else:
@@ -90,10 +77,7 @@ def calculateCCC(validationFolder, modelOutputFolder):
             subjectCCC = []
             subjectCCC.append(valenceCCC)
             currentSubject = subjectNumber
-
-
     cccList.append(subjectCCC)
-
 
     print("-----------Final Results-----------")
     phrase1 = "Subjects  | "
@@ -101,25 +85,29 @@ def calculateCCC(validationFolder, modelOutputFolder):
         phrase1 = phrase1 + "Story "+str(i+1)+ " | "
 
     print (phrase1)
-
-
     for i in range (len(cccList)):
         phrase2 = "Subject "+str(i+1) + " | "
         for j in range (len(cccList[i])):
             phrase2 = phrase2 + "{:.2f}".format(cccList[i][j])  + "    | "
-
         print (phrase2)
 
-    print ("")
+    print("-----------------")
+    print("Mean      |", "{:.2f}".format(numpy.array(cccList).mean()))
+    print("Std       |", "{:.2f}".format(numpy.array(cccList).std()))
+    print("-----------------")
+    print("")
     print("")
     print("----------- Personalized Track-----------")
     meanCCCPersonalized = numpy.array(cccList).mean(axis=1)
-
     for i in range(len(meanCCCPersonalized)):
-        print("Subject " + str(i+1) + " | " + "{:.2f}".format(meanCCCPersonalized[i]))
+        print("Subject " + str(i+1) + " | " +
+              "{:.2f}".format(meanCCCPersonalized[i]))
 
-    print ("-----------------")
-    print ("Mean      |", "{:.2f}".format(numpy.array(meanCCCPersonalized).mean()))
+    print("-----------------")
+    print("Mean      |", "{:.2f}".\
+          format(numpy.array(meanCCCPersonalized).mean()))
+    print("Std       |", "{:.2f}".\
+          format(numpy.array(meanCCCPersonalized).std()))
     print("-----------------")
 
     print("")
@@ -128,10 +116,14 @@ def calculateCCC(validationFolder, modelOutputFolder):
     meanCCCPersonalized = numpy.array(cccList).mean(axis=0)
 
     for i in range(len(meanCCCPersonalized)):
-        print("Story " + str(i + 1) + " | " + "{:.2f}".format(meanCCCPersonalized[i]))
+        print("Story " + str(i + 1) + " | " +
+              "{:.2f}".format(meanCCCPersonalized[i]))
 
     print("---------------")
-    print("Mean    |", "{:.2f}".format(numpy.array(meanCCCPersonalized).mean()))
+    print("Mean    |", "{:.2f}".\
+          format(numpy.array(meanCCCPersonalized).mean()))
+    print("Std     |", "{:.2f}".\
+          format(numpy.array(meanCCCPersonalized).std()))
     print("---------------")
 
 
